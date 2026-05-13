@@ -1,0 +1,44 @@
+# ============================================================
+# Hay Day Farm Tracker – .htaccess Password Protection
+# ============================================================
+# Rename this file to ".htaccess" to activate page access limit.
+#
+# Default username:   admin
+# Default password:   hayday2024
+#
+# IMPORTANT: You MUST create a corresponding .htpasswd file
+# for the password to work. See instructions below.
+# ============================================================
+
+AuthType Basic
+AuthName "Hay Day Farm Tracker - Restricted Access"
+AuthUserFile /path/to/.htpasswd
+Require valid-user
+
+# ============================================================
+# How to set up the .htpasswd file
+# ============================================================
+# 1. Generate a password hash. You can use any of these methods:
+#
+#    Option A – Online generator:
+#       Go to https://hostingcanada.org/htpasswd-generator/
+#       Enter username: admin
+#       Enter password: hayday2024
+#       Copy the generated line.
+#
+#    Option B – Using Node.js (if installed):
+#       npx htpasswd -nb admin hayday2024
+#
+#    Option C – Using Python (if installed):
+#       python -c "import getpass; from htpasswd import Bcrypt; print(Bcrypt().generate(getpass.getpass('Password: ')))"
+#
+# 2. Create a file named ".htpasswd" in the same directory
+#    as this .htaccess file, containing the generated line.
+#
+# 3. Update the AuthUserFile path above to the full server
+#    path to your .htpasswd file (e.g., /home/user/.htpasswd).
+#
+# 4. When both .htaccess and .htpasswd are in place, visiting
+#    any page in this directory will prompt for the username
+#    and password.
+# ============================================================
