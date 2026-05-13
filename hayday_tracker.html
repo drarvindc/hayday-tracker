@@ -181,7 +181,7 @@
     <!-- SECTION 2: Town Service Buildings -->
     <div id="townSection" class="bg-white rounded-3xl shadow overflow-hidden mb-12">
       <div class="bg-amber-800 text-white px-6 py-3 text-xl font-semibold flex items-center gap-3">
-        <i class="fas fa-city"></i> Town Service Buildings Upgrade Tracker (Global Pool)
+        <i class="fas fa-city"></i> Town Service Buildings Upgrade Tracker
       </div>
       <table id="townTable" class="w-full">
         <thead id="townHeader"></thead>
@@ -192,7 +192,7 @@
     <!-- SECTION 3: Personal Train -->
     <div id="trainSection" class="bg-white rounded-3xl shadow overflow-hidden mb-12">
       <div class="bg-purple-800 text-white px-6 py-3 text-xl font-semibold flex items-center gap-3">
-        <i class="fas fa-train"></i> Personal Train Upgrade Tracker (Global Pool)
+        <i class="fas fa-train"></i> Personal Train Upgrade Tracker
       </div>
       <table id="trainTable" class="w-full">
         <thead id="trainHeader"></thead>
@@ -666,7 +666,7 @@
         </div><\/td>`;
       });
       headerHTML += `<\/tr><tr class="bg-green-700 text-white text-sm"><td class="item-col"><\/td>`;
-      accounts.forEach(() => { headerHTML += `<th class="py-2">Current / Level</th><th class="py-2">Needed (global)</th>`; });
+      accounts.forEach(() => { headerHTML += `<th class="py-2">Current</th><th class="py-2">Needed</th>`; });
       headerHTML += `<\/tr>`;
       header.innerHTML = headerHTML;
       let lastCategory = null;
@@ -760,7 +760,7 @@
       });
       headerHTML += `<\/tr>`;
       headerHTML += `<tr class="bg-purple-700 text-white text-sm"><td class="item-col"><\/td>`;
-      accounts.forEach(() => { headerHTML += `<th class="py-2">Current / Required</th><th class="py-2">Needed (global)</th>`; });
+      accounts.forEach(() => { headerHTML += `<th class="py-2">Current</th><th class="py-2">Needed</th>`; });
       headerHTML += `<\/tr>`;
       headerRow.innerHTML = headerHTML;
 
