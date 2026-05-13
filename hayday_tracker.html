@@ -69,6 +69,42 @@
     .not-required .current-input-train {
       background-color: #e5e7eb;
     }
+    /* Sync status bar */
+    #syncStatus {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 14px;
+      border-radius: 20px;
+    }
+    .sync-connected { background: #d1fae5; color: #166534; }
+    .sync-disconnected { background: #fee2e2; color: #b91c1c; }
+    .sync-loading { background: #fef3c7; color: #92400e; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .sync-dot-green { background: #16a34a; }
+    .sync-dot-red { background: #dc2626; }
+    .sync-dot-yellow { background: #d97706; }
+    /* Modal overlay */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-box {
+      background: white; border-radius: 24px; padding: 32px;
+      max-width: 460px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-box input {
+      width: 100%; border: 2px solid #d1d5db; border-radius: 40px;
+      padding: 12px 18px; font-size: 1rem; margin-top: 4px;
+    }
+    .modal-box input:focus { border-color: #166534; outline: none; }
+    .modal-box label { font-weight: 600; font-size: 0.9rem; color: #374151; display: block; margin-top: 14px; }
+    .modal-box .btn-primary { background: #166534; color: white; border: none; border-radius: 40px; padding: 12px 28px; font-weight: 600; cursor: pointer; }
+    .modal-box .btn-primary:hover { background: #15803d; }
+    .modal-box .btn-secondary { background: #e5e7eb; color: #374151; border: none; border-radius: 40px; padding: 12px 28px; font-weight: 600; cursor: pointer; }
+    .modal-box .btn-secondary:hover { background: #d1d5db; }
   </style>
 </head>
 <body class="bg-gray-50 p-6">
@@ -76,8 +112,8 @@
     <h1 class="text-4xl font-bold text-green-800 mb-2">Hay Day Farm Tracker</h1>
     <p class="text-green-700 mb-4">Global pool surplus/deficit • Move items between farms</p>
 
-    <!-- Toggle Buttons -->
-    <div class="flex flex-wrap gap-4 mb-6">
+    <!-- Top bar: Toggle Buttons + Sync -->
+    <div class="flex flex-wrap items-center gap-4 mb-6">
       <button onclick="toggleSection('farmsSection')" class="bg-blue-700 hover:bg-blue-800 text-white px-5 py-2 rounded-full flex items-center gap-2">
         <i class="fas fa-tractor"></i> Toggle Farms
       </button>
@@ -90,6 +126,34 @@
       <button onclick="toggleSection('trainSection')" class="bg-purple-700 hover:bg-purple-800 text-white px-5 py-2 rounded-full flex items-center gap-2">
         <i class="fas fa-train"></i> Toggle Personal Train
       </button>
+      <span class="flex-1"></span>
+      <!-- Sync controls -->
+      <span id="syncStatus" class="sync-disconnected"><span class="sync-dot sync-dot-red"></span> Not synced</span>
+      <button onclick="openSyncModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
+        <i class="fas fa-cog"></i> Sync Settings
+      </button>
+      <button id="refreshBtn" onclick="refreshFromGist()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
+        <i class="fas fa-sync-alt"></i> Refresh
+      </button>
+    </div>
+
+    <!-- Sync Settings Modal -->
+    <div id="syncModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">⚙️ Sync Settings</h2>
+        <p class="text-sm text-gray-500 mb-4">Sync data across devices via a GitHub Gist.</p>
+        <label>Gist ID</label>
+        <input id="gistIdInput" type="text" placeholder="abc123def456...">
+        <label>GitHub Token (classic, <code>gist</code> scope)</label>
+        <input id="tokenInput" type="password" placeholder="ghp_...">
+        <div class="flex flex-wrap gap-3 mt-6">
+          <button onclick="saveSyncSettings()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+          <button onclick="testGistConnection()" class="btn-secondary"><i class="fas fa-plug"></i> Test Connection</button>
+          <button onclick="clearSyncSettings()" class="btn-secondary text-red-600"><i class="fas fa-trash"></i> Reset</button>
+        </div>
+        <div id="syncModalStatus" class="mt-4 text-sm"></div>
+        <button onclick="closeSyncModal()" class="mt-4 text-gray-500 hover:text-gray-700 text-sm">Close</button>
+      </div>
     </div>
 
     <!-- Farms Section (hidden by default) -->
@@ -147,34 +211,32 @@
   </div>
 
   <script>
+    // ---------- GitHub Gist Configuration ----------
+    let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
+    let GITHUB_TOKEN = localStorage.getItem('hayday_github_token') || '';
+    const GIST_FILENAME = 'hayday_data.json';
+
     // ---------- Farm Data ----------
-    let accounts = [
+    let accounts = [];
+
+    const defaultAccounts = [
       { id: 1, name: "Farm A", siloLevel: 48, barnLevel: 60, expansionLevel: 20,
         currents: { "Nails":20, "Screws":0, "Wood Panels":0, "Bolts":0, "Planks":0, "Duct Tape":0, "Land Deed":0, "Mallet":0, "Marker Stake":0 },
-        townLevels: {
-          "Grocery Store": 17, "Cinema": 5, "Diner": 12, "Bed and Breakfast": 8,
-          "Spa": 20, "Gift Shop": 3, "Beach Café": 6, "Town Hall": 10, "Train Station": 4
-        },
+        townLevels: { "Grocery Store": 17, "Cinema": 5, "Diner": 12, "Bed and Breakfast": 8, "Spa": 20, "Gift Shop": 3, "Beach Café": 6, "Town Hall": 10, "Train Station": 4 },
         townCurrents: { "Brick":0, "Hammer":0, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
         trainLevel: 10,
         trainCurrents: { "Refined Coal": 0, "Iron Bar": 0, "Silver Bar": 0, "Gold Bar": 0, "Platinum Bar": 0 }
       },
       { id: 2, name: "Farm B", siloLevel: 50, barnLevel: 55, expansionLevel: 18,
         currents: { "Nails":10, "Screws":5, "Wood Panels":3, "Bolts":2, "Planks":1, "Duct Tape":4, "Land Deed":2, "Mallet":1, "Marker Stake":0 },
-        townLevels: {
-          "Grocery Store": 10, "Cinema": 4, "Diner": 8, "Bed and Breakfast": 6,
-          "Spa": 12, "Gift Shop": 2, "Beach Café": 4, "Town Hall": 7, "Train Station": 3
-        },
+        townLevels: { "Grocery Store": 10, "Cinema": 4, "Diner": 8, "Bed and Breakfast": 6, "Spa": 12, "Gift Shop": 2, "Beach Café": 4, "Town Hall": 7, "Train Station": 3 },
         townCurrents: { "Brick":1, "Hammer":2, "Hand Drill":0, "Paint Bucket":1, "Stone Block":0, "Tar Bucket":0 },
         trainLevel: 15,
         trainCurrents: { "Refined Coal": 5, "Iron Bar": 5, "Silver Bar": 2, "Gold Bar": 0, "Platinum Bar": 0 }
       },
       { id: 3, name: "Farm C", siloLevel: 30, barnLevel: 40, expansionLevel: 12,
         currents: { "Nails":30, "Screws":8, "Wood Panels":12, "Bolts":6, "Planks":10, "Duct Tape":5, "Land Deed":3, "Mallet":4, "Marker Stake":2 },
-        townLevels: {
-          "Grocery Store": 5, "Cinema": 3, "Diner": 4, "Bed and Breakfast": 3,
-          "Spa": 7, "Gift Shop": 1, "Beach Café": 2, "Town Hall": 4, "Train Station": 2
-        },
+        townLevels: { "Grocery Store": 5, "Cinema": 3, "Diner": 4, "Bed and Breakfast": 3, "Spa": 7, "Gift Shop": 1, "Beach Café": 2, "Town Hall": 4, "Train Station": 2 },
         townCurrents: { "Brick":0, "Hammer":1, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
         trainLevel: 7,
         trainCurrents: { "Refined Coal": 2, "Iron Bar": 3, "Silver Bar": 0, "Gold Bar": 0, "Platinum Bar": 1 }
@@ -213,7 +275,7 @@
       else return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":base };
     }
 
-    const trackedItems = [ /* ... unchanged ... */ 
+    const trackedItems = [
       { name: "Nails", category: "silo", icon: "fas fa-gripfire" },
       { name: "Screws", category: "silo", icon: "fas fa-cog" },
       { name: "Wood Panels", category: "silo", icon: "fas fa-tree" },
@@ -225,16 +287,16 @@
       { name: "Marker Stake", category: "expansion", icon: "fas fa-map-marker-alt" }
     ];
 
-    const townBuildings = [ /* unchanged */ 
+    const townBuildings = [
       { name: "Grocery Store", mats: ["Bolts", "Duct Tape", "Stone Block"] },
-      { name: "Cinema", mats: ["Hammer", "Nails", "Wood Panels"] },
-      { name: "Diner", mats: ["Paint Bucket", "Planks", "Screws"] },
-      { name: "Bed and Breakfast", mats: ["Brick", "Hand Drill", "Paint Bucket"] },
-      { name: "Spa", mats: ["Brick", "Stone Block", "Tar Bucket"] },
-      { name: "Gift Shop", mats: ["Hammer", "Stone Block", "Tar Bucket"] },
-      { name: "Beach Café", mats: ["Hammer", "Hand Drill", "Tar Bucket"] },
-      { name: "Town Hall", mats: ["Hammer", "Paint Bucket", "Stone Block"] },
-      { name: "Train Station", mats: ["Brick", "Hand Drill", "Tar Bucket"] }
+      { name: "Cinema", mats: ["Nails", "Wood Panels", "Hammer"] },
+      { name: "Diner", mats: ["Planks", "Screws", "Paint Bucket"] },
+      { name: "Bed and Breakfast", mats: ["Hand Drill", "Brick", "Paint Bucket"] },
+      { name: "Spa", mats: ["Brick", "Tar Bucket", "Stone Block"] },
+      { name: "Gift Shop", mats: ["Stone Block", "Tar Bucket", "Hammer"] },
+      { name: "Beach Café", mats: ["Hand Drill", "Tar Bucket", "Hammer"] },
+      { name: "Town Hall", mats: ["Stone Block", "Hammer", "Paint Bucket"] },
+      { name: "Train Station", mats: ["Tar Bucket", "Brick", "Hand Drill"] }
     ];
 
     const sharedMaterials = ["Nails", "Screws", "Wood Panels", "Bolts", "Planks", "Duct Tape"];
@@ -250,24 +312,198 @@
       ]}
     };
 
-    // ---------- Persistence ----------
-    function loadData() {
-      const saved = localStorage.getItem('haydayGlobalPoolV5');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        accounts = parsed.accounts || accounts;
+    // ---------- Sync Status UI ----------
+    function setSyncStatus(state, msg) {
+      const el = document.getElementById('syncStatus');
+      if (!el) return;
+      if (state === 'connected') {
+        el.className = 'sync-connected';
+        el.innerHTML = '<span class="sync-dot sync-dot-green"></span> ' + (msg || 'Synced via Gist');
+      } else if (state === 'loading') {
+        el.className = 'sync-loading';
+        el.innerHTML = '<span class="sync-dot sync-dot-yellow"></span> ' + (msg || 'Saving...');
+      } else {
+        el.className = 'sync-disconnected';
+        el.innerHTML = '<span class="sync-dot sync-dot-red"></span> ' + (msg || 'Not synced');
       }
     }
-    function saveData() {
-      localStorage.setItem('haydayGlobalPoolV5', JSON.stringify({ accounts }));
+
+    // ---------- GitHub Gist API ----------
+    async function loadFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        setSyncStatus('disconnected', 'No Gist configured');
+        return false;
+      }
+      setSyncStatus('loading', 'Loading from Gist...');
+      try {
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+        const gist = await response.json();
+        if (!gist.files || !gist.files[GIST_FILENAME]) {
+          throw new Error('File not found in gist');
+        }
+        const content = gist.files[GIST_FILENAME].content;
+        const data = JSON.parse(content);
+        accounts = data.accounts || [];
+        // Ensure all nested properties exist on loaded accounts
+        ensureAccountsValid();
+        setSyncStatus('connected', 'Synced via Gist');
+        return true;
+      } catch (err) {
+        console.error('loadFromGist error:', err);
+        setSyncStatus('disconnected', 'Load failed: ' + (err.message || 'unknown error'));
+        return false;
+      }
+    }
+
+    async function saveToGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        setSyncStatus('disconnected', 'No Gist configured');
+        return false;
+      }
+      setSyncStatus('loading', 'Saving...');
+      try {
+        const payload = {
+          files: {
+            [GIST_FILENAME]: {
+              content: JSON.stringify({ accounts }, null, 2)
+            }
+          }
+        };
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+        setSyncStatus('connected', 'Synced via Gist');
+        return true;
+      } catch (err) {
+        console.error('saveToGist error:', err);
+        setSyncStatus('disconnected', 'Save failed: ' + (err.message || 'unknown error'));
+        return false;
+      }
+    }
+
+    // ---------- Persistence wrapper ----------
+    async function saveData() {
+      await saveToGist();
       renderAccounts();
       renderSiloBarnTable();
       renderTownTable();
       renderTrainTable();
     }
 
-    // --- Farm cards and update functions (same as before) ---
-    function renderAccounts() { /* unchanged */ 
+    // ---------- Sync settings UI ----------
+    function openSyncModal() {
+      document.getElementById('gistIdInput').value = GIST_ID;
+      document.getElementById('tokenInput').value = GITHUB_TOKEN;
+      document.getElementById('syncModalStatus').innerHTML = '';
+      document.getElementById('syncModal').classList.remove('hidden');
+    }
+    function closeSyncModal() {
+      document.getElementById('syncModal').classList.add('hidden');
+    }
+    function saveSyncSettings() {
+      GIST_ID = document.getElementById('gistIdInput').value.trim();
+      GITHUB_TOKEN = document.getElementById('tokenInput').value.trim();
+      localStorage.setItem('hayday_gist_id', GIST_ID);
+      localStorage.setItem('hayday_github_token', GITHUB_TOKEN);
+      const status = document.getElementById('syncModalStatus');
+      if (GIST_ID && GITHUB_TOKEN) {
+        status.innerHTML = '<span class="text-green-700">✅ Credentials saved. Testing connection...</span>';
+        testGistConnection();
+      } else {
+        status.innerHTML = '<span class="text-red-600">⚠️ Both Gist ID and Token are required.</span>';
+        setSyncStatus('disconnected', 'No Gist configured');
+      }
+    }
+    function clearSyncSettings() {
+      if (!confirm('Clear Gist ID and Token? Data will no longer sync.')) return;
+      GIST_ID = '';
+      GITHUB_TOKEN = '';
+      localStorage.removeItem('hayday_gist_id');
+      localStorage.removeItem('hayday_github_token');
+      document.getElementById('gistIdInput').value = '';
+      document.getElementById('tokenInput').value = '';
+      document.getElementById('syncModalStatus').innerHTML = '<span class="text-gray-600">Cleared. Re-enter credentials to reconnect.</span>';
+      setSyncStatus('disconnected', 'Not synced');
+    }
+    async function testGistConnection() {
+      const status = document.getElementById('syncModalStatus');
+      const tmpId = document.getElementById('gistIdInput').value.trim();
+      const tmpToken = document.getElementById('tokenInput').value.trim();
+      if (!tmpId || !tmpToken) {
+        status.innerHTML = '<span class="text-red-600">⚠️ Enter Gist ID and Token first.</span>';
+        return;
+      }
+      status.innerHTML = '<span class="text-yellow-700">⏳ Testing...</span>';
+      try {
+        const url = `https://api.github.com/gists/${tmpId}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${tmpToken}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const gist = await response.json();
+        if (gist.files && gist.files[GIST_FILENAME]) {
+          status.innerHTML = '<span class="text-green-700">✅ Connection OK! Gist file found.</span>';
+        } else {
+          status.innerHTML = `<span class="text-yellow-700">⚠️ Gist found but missing ${GIST_FILENAME}. Create it first.</span>`;
+        }
+      } catch (err) {
+        status.innerHTML = '<span class="text-red-600">❌ Connection failed: ' + (err.message || 'unknown error') + '</span>';
+      }
+    }
+    async function refreshFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Sync Settings first (Gist ID + Token).');
+        return;
+      }
+      if (!confirm('Reload data from Gist? Any unsaved local changes will be lost.')) return;
+      const ok = await loadFromGist();
+      if (ok) {
+        renderAccounts();
+        renderSiloBarnTable();
+        renderTownTable();
+        renderTrainTable();
+      } else {
+        alert('Failed to load from Gist. Check credentials.');
+      }
+    }
+
+    // ---------- Ensure accounts have all required properties ----------
+    function ensureAccountsValid() {
+      accounts.forEach(acc => {
+        if (!acc.townLevels) acc.townLevels = {};
+        townBuildings.forEach(b => { if (acc.townLevels[b.name] === undefined) acc.townLevels[b.name] = 1; });
+        if (!acc.townCurrents) acc.townCurrents = {};
+        exclusiveTownMaterials.forEach(m => { if (acc.townCurrents[m] === undefined) acc.townCurrents[m] = 0; });
+        if (!acc.currents) acc.currents = {};
+        trackedItems.forEach(item => { if (acc.currents[item.name] === undefined) acc.currents[item.name] = 0; });
+        expansionMaterials.forEach(m => { if (acc.currents[m] === undefined) acc.currents[m] = 0; });
+        if (acc.trainLevel === undefined) acc.trainLevel = 1;
+        if (!acc.trainCurrents) acc.trainCurrents = {};
+        trainMaterials.forEach(m => { if (acc.trainCurrents[m] === undefined) acc.trainCurrents[m] = 0; });
+      });
+    }
+
+    // --- Farm cards and update functions ---
+    function renderAccounts() {
       const container = document.getElementById('accountsContainer');
       container.innerHTML = '';
       accounts.forEach(acc => {
@@ -340,8 +576,8 @@
       saveData();
     };
 
-    // --- Silo/Barn/Exp table (unchanged) ---
-    function renderSiloBarnTable() { /* same as before, omitted for brevity but fully functional */ 
+    // --- Silo/Barn/Exp table ---
+    function renderSiloBarnTable() {
       const header = document.getElementById('tableHeader');
       const tbody = document.getElementById('tableBody');
       if (!header || !tbody) return;
@@ -389,7 +625,7 @@
       });
     }
 
-    // --- Town Buildings table (unchanged) ---
+    // --- Town Buildings table ---
     function renderTownTable() {
       const container = document.getElementById('townBody');
       const headerRow = document.getElementById('townHeader');
@@ -434,7 +670,7 @@
       });
     }
 
-    // --- Personal Train table with visual distinction for not-required bars ---
+    // --- Personal Train table ---
     function renderTrainTable() {
       const container = document.getElementById('trainBody');
       const headerRow = document.getElementById('trainHeader');
@@ -446,20 +682,17 @@
       let headerHTML = `<tr class="farm-header"><th class="item-col">Bar Type</th>`;
       accounts.forEach(acc => { headerHTML += `<th colspan="2" class="py-3">${acc.name}</th>`; });
       headerHTML += `<\/tr>`;
-      // Train level row
       headerHTML += `<tr class="bg-purple-800 text-white text-sm"><td class="item-col font-bold">🚂 Train Level<\/td>`;
       accounts.forEach(acc => {
         const level = acc.trainLevel || 1;
         headerHTML += `<td colspan="2" class="p-2"><input type="number" value="${level}" class="train-level-input" onchange="updateTrainLevel(${acc.id}, this.value)"><\/td>`;
       });
       headerHTML += `<\/tr>`;
-      // Subheader
       headerHTML += `<tr class="bg-purple-700 text-white text-sm"><td class="item-col"><\/td>`;
       accounts.forEach(() => { headerHTML += `<th class="py-2">Current / Required</th><th class="py-2">Needed (global)</th>`; });
       headerHTML += `<\/tr>`;
       headerRow.innerHTML = headerHTML;
 
-      // For each bar, compute per farm and apply "not-required" class if needed
       trainMaterials.forEach(bar => {
         let totalCurrent = 0;
         accounts.forEach(acc => { totalCurrent += (acc.trainCurrents[bar] || 0); });
@@ -472,7 +705,6 @@
           const neededText = needed > 0 ? `+${needed}` : needed === 0 ? '0' : `${needed}`;
           const neededClass = needed > 0 ? 'surplus-cell' : (needed < 0 ? 'deficit-cell' : 'neutral-cell');
           const isRequired = required > 0;
-          // Apply a special class to the entire cell group if not required
           const styleClass = isRequired ? '' : 'not-required';
           row += `<td class="py-2 ${styleClass}"><div class="flex justify-center items-center gap-1"><input type="number" value="${current}" class="current-input-train" onchange="updateMaterial(${acc.id}, '${bar}', this.value)"><span class="text-xs text-gray-500">/ ${required}</span></div><\/td>`;
           row += `<td class="py-2 ${styleClass} ${isRequired ? neededClass : 'text-gray-400'} font-semibold">${neededText}<\/td>`;
@@ -488,7 +720,7 @@
       if (el) el.classList.toggle('hidden');
     }
 
-    // Product lookup (unchanged)
+    // Product lookup
     const searchInput = document.getElementById('searchInput');
     const suggestionsDiv = document.getElementById('suggestions');
     const detailsDiv = document.getElementById('itemDetails');
@@ -524,23 +756,24 @@
     }
 
     // Initialize
-    function init() {
-      loadData();
-      accounts.forEach(acc => {
-        if (!acc.townLevels) acc.townLevels = {};
-        townBuildings.forEach(b => { if (acc.townLevels[b.name] === undefined) acc.townLevels[b.name] = 1; });
-        if (!acc.townCurrents) acc.townCurrents = {};
-        exclusiveTownMaterials.forEach(m => { if (acc.townCurrents[m] === undefined) acc.townCurrents[m] = 0; });
-        expansionMaterials.forEach(m => { if (acc.currents[m] === undefined) acc.currents[m] = 0; });
-        if (acc.trainLevel === undefined) acc.trainLevel = 1;
-        if (!acc.trainCurrents) acc.trainCurrents = {};
-        trainMaterials.forEach(m => { if (acc.trainCurrents[m] === undefined) acc.trainCurrents[m] = 0; });
-      });
+    async function init() {
+      // If Gist credentials exist, try loading from Gist; otherwise use default data
+      if (GIST_ID && GITHUB_TOKEN) {
+        const loaded = await loadFromGist();
+        if (!loaded) {
+          // Fallback to defaults if Gist fails
+          accounts = JSON.parse(JSON.stringify(defaultAccounts));
+          ensureAccountsValid();
+        }
+      } else {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        ensureAccountsValid();
+        setSyncStatus('disconnected', 'No Gist configured');
+      }
       renderAccounts();
       renderSiloBarnTable();
       renderTownTable();
       renderTrainTable();
-      saveData();
     }
     window.onload = init;
     window.updateFarmLevel = updateFarmLevel;
@@ -548,6 +781,12 @@
     window.updateTrainLevel = updateTrainLevel;
     window.updateMaterial = updateMaterial;
     window.toggleSection = toggleSection;
+    window.openSyncModal = openSyncModal;
+    window.closeSyncModal = closeSyncModal;
+    window.saveSyncSettings = saveSyncSettings;
+    window.clearSyncSettings = clearSyncSettings;
+    window.testGistConnection = testGistConnection;
+    window.refreshFromGist = refreshFromGist;
   </script>
 </body>
 </html>

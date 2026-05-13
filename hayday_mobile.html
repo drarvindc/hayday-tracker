@@ -22,12 +22,76 @@
     .building-header { background: #fef3c7; padding: 0.5rem; border-radius: 1rem; margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
     .material-row { padding-left: 1rem; }
     hr { margin: 1rem 0; }
+    /* Sync status */
+    #mobileSyncStatus {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+    .sync-connected { background: #d1fae5; color: #166534; }
+    .sync-disconnected { background: #fee2e2; color: #b91c1c; }
+    .sync-loading { background: #fef3c7; color: #92400e; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .sync-dot-green { background: #16a34a; }
+    .sync-dot-red { background: #dc2626; }
+    .sync-dot-yellow { background: #d97706; }
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    .modal-box {
+      background: white; border-radius: 24px; padding: 24px;
+      max-width: 420px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .modal-box input {
+      width: 100%; border: 2px solid #d1d5db; border-radius: 40px;
+      padding: 12px 16px; font-size: 0.95rem; margin-top: 4px;
+    }
+    .modal-box input:focus { border-color: #166534; outline: none; }
+    .modal-box label { font-weight: 600; font-size: 0.85rem; color: #374151; display: block; margin-top: 12px; }
+    .modal-box .btn-primary { background: #166534; color: white; border: none; border-radius: 40px; padding: 10px 22px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .modal-box .btn-primary:hover { background: #15803d; }
+    .modal-box .btn-secondary { background: #e5e7eb; color: #374151; border: none; border-radius: 40px; padding: 10px 22px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+    .modal-box .btn-secondary:hover { background: #d1d5db; }
   </style>
 </head>
 <body class="bg-gray-100 p-4 pb-20">
   <div class="max-w-lg mx-auto">
-    <h1 class="text-2xl font-bold text-green-800 mb-1">Hay Day Mobile Tracker</h1>
-    <p class="text-sm text-gray-600 mb-4">Global pool • One farm at a time</p>
+    <div class="flex items-center justify-between mb-2">
+      <h1 class="text-2xl font-bold text-green-800">Hay Day Mobile Tracker</h1>
+      <span id="mobileSyncStatus" class="sync-disconnected"><span class="sync-dot sync-dot-red"></span></span>
+    </div>
+    <p class="text-sm text-gray-600 mb-4 flex justify-between">
+      <span>Global pool • One farm at a time</span>
+      <span class="flex gap-2">
+        <button onclick="openSyncModal()" class="text-xs text-blue-600 underline">Sync Settings</button>
+        <button onclick="refreshFromGist()" class="text-xs text-gray-500 underline">Refresh</button>
+      </span>
+    </p>
+
+    <!-- Sync Settings Modal -->
+    <div id="syncModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <h2 class="text-xl font-bold text-gray-800 mb-1">⚙️ Sync Settings</h2>
+        <p class="text-xs text-gray-500 mb-3">Sync across devices via a GitHub Gist.</p>
+        <label>Gist ID</label>
+        <input id="gistIdInput" type="text" placeholder="abc123def456...">
+        <label>GitHub Token (classic, <code>gist</code> scope)</label>
+        <input id="tokenInput" type="password" placeholder="ghp_...">
+        <div class="flex flex-wrap gap-2 mt-4">
+          <button onclick="saveSyncSettings()" class="btn-primary"><i class="fas fa-save"></i> Save</button>
+          <button onclick="testGistConnection()" class="btn-secondary"><i class="fas fa-plug"></i> Test</button>
+          <button onclick="clearSyncSettings()" class="btn-secondary text-red-600"><i class="fas fa-trash"></i> Reset</button>
+        </div>
+        <div id="syncModalStatus" class="mt-3 text-xs"></div>
+        <button onclick="closeSyncModal()" class="mt-3 text-gray-500 hover:text-gray-700 text-xs">Close</button>
+      </div>
+    </div>
 
     <!-- Farm selector and global totals toggle -->
     <div class="card">
@@ -75,13 +139,18 @@
       <div id="trainContainer"></div>
     </div>
 
-    <div class="text-center text-xs text-gray-400 mt-6">Data shared with desktop version via localStorage</div>
+    <div class="text-center text-xs text-gray-400 mt-6">Data shared with desktop version via GitHub Gist</div>
   </div>
 
   <script>
-    // -------- Data structure (same as desktop) --------
+    // -------- GitHub Gist Configuration --------
+    let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
+    let GITHUB_TOKEN = localStorage.getItem('hayday_github_token') || '';
+    const GIST_FILENAME = 'hayday_data.json';
+
+    // -------- Data structure --------
     let accounts = [];
-    const STORAGE_KEY = 'haydayGlobalPoolV5';  // must match desktop key
+    const STORAGE_KEY = 'haydayGlobalPoolV5';  // kept for reference, no longer used for farm data
 
     // Item definitions
     const trackedItems = [
@@ -98,14 +167,14 @@
 
     const townBuildings = [
       { name: "Grocery Store", mats: ["Bolts", "Duct Tape", "Stone Block"] },
-      { name: "Cinema", mats: ["Hammer", "Nails", "Wood Panels"] },
-      { name: "Diner", mats: ["Paint Bucket", "Planks", "Screws"] },
-      { name: "Bed and Breakfast", mats: ["Brick", "Hand Drill", "Paint Bucket"] },
-      { name: "Spa", mats: ["Brick", "Stone Block", "Tar Bucket"] },
-      { name: "Gift Shop", mats: ["Hammer", "Stone Block", "Tar Bucket"] },
-      { name: "Beach Café", mats: ["Hammer", "Hand Drill", "Tar Bucket"] },
-      { name: "Town Hall", mats: ["Hammer", "Paint Bucket", "Stone Block"] },
-      { name: "Train Station", mats: ["Brick", "Hand Drill", "Tar Bucket"] }
+      { name: "Cinema", mats: ["Nails", "Wood Panels", "Hammer"] },
+      { name: "Diner", mats: ["Planks", "Screws", "Paint Bucket"] },
+      { name: "Bed and Breakfast", mats: ["Hand Drill", "Brick", "Paint Bucket"] },
+      { name: "Spa", mats: ["Brick", "Tar Bucket", "Stone Block"] },
+      { name: "Gift Shop", mats: ["Stone Block", "Tar Bucket", "Hammer"] },
+      { name: "Beach Café", mats: ["Hand Drill", "Tar Bucket", "Hammer"] },
+      { name: "Town Hall", mats: ["Stone Block", "Hammer", "Paint Bucket"] },
+      { name: "Train Station", mats: ["Tar Bucket", "Brick", "Hand Drill"] }
     ];
 
     const sharedMaterials = ["Nails", "Screws", "Wood Panels", "Bolts", "Planks", "Duct Tape"];
@@ -145,44 +214,201 @@
       else return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":base };
     }
 
-    // Load/save
-    function loadData() {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        accounts = JSON.parse(saved).accounts;
+    // Default accounts for first-time load
+    const defaultAccounts = [
+      { id: 1, name: "Farm A", siloLevel: 48, barnLevel: 60, expansionLevel: 20,
+        currents: { "Nails":20, "Screws":0, "Wood Panels":0, "Bolts":0, "Planks":0, "Duct Tape":0, "Land Deed":0, "Mallet":0, "Marker Stake":0 },
+        townLevels: { "Grocery Store":17, "Cinema":5, "Diner":12, "Bed and Breakfast":8, "Spa":20, "Gift Shop":3, "Beach Café":6, "Town Hall":10, "Train Station":4 },
+        townCurrents: { "Brick":0, "Hammer":0, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 10,
+        trainCurrents: { "Refined Coal":0, "Iron Bar":0, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":0 }
+      },
+      { id: 2, name: "Farm B", siloLevel: 50, barnLevel: 55, expansionLevel: 18,
+        currents: { "Nails":10, "Screws":5, "Wood Panels":3, "Bolts":2, "Planks":1, "Duct Tape":4, "Land Deed":2, "Mallet":1, "Marker Stake":0 },
+        townLevels: { "Grocery Store":10, "Cinema":4, "Diner":8, "Bed and Breakfast":6, "Spa":12, "Gift Shop":2, "Beach Café":4, "Town Hall":7, "Train Station":3 },
+        townCurrents: { "Brick":1, "Hammer":2, "Hand Drill":0, "Paint Bucket":1, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 15,
+        trainCurrents: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":2, "Gold Bar":0, "Platinum Bar":0 }
+      },
+      { id: 3, name: "Farm C", siloLevel: 30, barnLevel: 40, expansionLevel: 12,
+        currents: { "Nails":30, "Screws":8, "Wood Panels":12, "Bolts":6, "Planks":10, "Duct Tape":5, "Land Deed":3, "Mallet":4, "Marker Stake":2 },
+        townLevels: { "Grocery Store":5, "Cinema":3, "Diner":4, "Bed and Breakfast":3, "Spa":7, "Gift Shop":1, "Beach Café":2, "Town Hall":4, "Train Station":2 },
+        townCurrents: { "Brick":0, "Hammer":1, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 7,
+        trainCurrents: { "Refined Coal":2, "Iron Bar":3, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":1 }
       }
-      if (!accounts || accounts.length === 0) {
-        // fallback default data
-        accounts = [
-          { id: 1, name: "Farm A", siloLevel: 48, barnLevel: 60, expansionLevel: 20,
-            currents: { "Nails":20, "Screws":0, "Wood Panels":0, "Bolts":0, "Planks":0, "Duct Tape":0, "Land Deed":0, "Mallet":0, "Marker Stake":0 },
-            townLevels: { "Grocery Store":17, "Cinema":5, "Diner":12, "Bed and Breakfast":8, "Spa":20, "Gift Shop":3, "Beach Café":6, "Town Hall":10, "Train Station":4 },
-            townCurrents: { "Brick":0, "Hammer":0, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
-            trainLevel: 10,
-            trainCurrents: { "Refined Coal":0, "Iron Bar":0, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":0 }
-          },
-          { id: 2, name: "Farm B", siloLevel: 50, barnLevel: 55, expansionLevel: 18,
-            currents: { "Nails":10, "Screws":5, "Wood Panels":3, "Bolts":2, "Planks":1, "Duct Tape":4, "Land Deed":2, "Mallet":1, "Marker Stake":0 },
-            townLevels: { "Grocery Store":10, "Cinema":4, "Diner":8, "Bed and Breakfast":6, "Spa":12, "Gift Shop":2, "Beach Café":4, "Town Hall":7, "Train Station":3 },
-            townCurrents: { "Brick":1, "Hammer":2, "Hand Drill":0, "Paint Bucket":1, "Stone Block":0, "Tar Bucket":0 },
-            trainLevel: 15,
-            trainCurrents: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":2, "Gold Bar":0, "Platinum Bar":0 }
-          },
-          { id: 3, name: "Farm C", siloLevel: 30, barnLevel: 40, expansionLevel: 12,
-            currents: { "Nails":30, "Screws":8, "Wood Panels":12, "Bolts":6, "Planks":10, "Duct Tape":5, "Land Deed":3, "Mallet":4, "Marker Stake":2 },
-            townLevels: { "Grocery Store":5, "Cinema":3, "Diner":4, "Bed and Breakfast":3, "Spa":7, "Gift Shop":1, "Beach Café":2, "Town Hall":4, "Train Station":2 },
-            townCurrents: { "Brick":0, "Hammer":1, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
-            trainLevel: 7,
-            trainCurrents: { "Refined Coal":2, "Iron Bar":3, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":1 }
+    ];
+
+    // ---------- Sync Status UI ----------
+    function setSyncStatus(state, msg) {
+      const el = document.getElementById('mobileSyncStatus');
+      if (!el) return;
+      if (state === 'connected') {
+        el.className = 'sync-connected';
+        el.innerHTML = '<span class="sync-dot sync-dot-green"></span> ' + (msg || 'Synced');
+      } else if (state === 'loading') {
+        el.className = 'sync-loading';
+        el.innerHTML = '<span class="sync-dot sync-dot-yellow"></span> ' + (msg || '...');
+      } else {
+        el.className = 'sync-disconnected';
+        el.innerHTML = '<span class="sync-dot sync-dot-red"></span> ' + (msg || 'Offline');
+      }
+    }
+
+    // ---------- GitHub Gist API ----------
+    async function loadFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        setSyncStatus('disconnected', 'No Gist');
+        return false;
+      }
+      setSyncStatus('loading', 'Loading...');
+      try {
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+        const gist = await response.json();
+        if (!gist.files || !gist.files[GIST_FILENAME]) {
+          throw new Error('File not found in gist');
+        }
+        const content = gist.files[GIST_FILENAME].content;
+        const data = JSON.parse(content);
+        accounts = data.accounts || [];
+        ensureAccountsValid();
+        setSyncStatus('connected', 'Synced');
+        return true;
+      } catch (err) {
+        console.error('loadFromGist error:', err);
+        setSyncStatus('disconnected', 'Load failed');
+        return false;
+      }
+    }
+
+    async function saveToGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        setSyncStatus('disconnected', 'No Gist');
+        return false;
+      }
+      setSyncStatus('loading', 'Saving...');
+      try {
+        const payload = {
+          files: {
+            [GIST_FILENAME]: {
+              content: JSON.stringify({ accounts }, null, 2)
+            }
           }
-        ];
+        };
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+        setSyncStatus('connected', 'Synced');
+        return true;
+      } catch (err) {
+        console.error('saveToGist error:', err);
+        setSyncStatus('disconnected', 'Save failed');
+        return false;
       }
-      // ensure all structures exist
+    }
+
+    // ---------- Sync settings UI ----------
+    function openSyncModal() {
+      document.getElementById('gistIdInput').value = GIST_ID;
+      document.getElementById('tokenInput').value = GITHUB_TOKEN;
+      document.getElementById('syncModalStatus').innerHTML = '';
+      document.getElementById('syncModal').classList.remove('hidden');
+    }
+    function closeSyncModal() {
+      document.getElementById('syncModal').classList.add('hidden');
+    }
+    function saveSyncSettings() {
+      GIST_ID = document.getElementById('gistIdInput').value.trim();
+      GITHUB_TOKEN = document.getElementById('tokenInput').value.trim();
+      localStorage.setItem('hayday_gist_id', GIST_ID);
+      localStorage.setItem('hayday_github_token', GITHUB_TOKEN);
+      const status = document.getElementById('syncModalStatus');
+      if (GIST_ID && GITHUB_TOKEN) {
+        status.innerHTML = '<span style="color:#166534;">✅ Saved. Testing...</span>';
+        testGistConnection();
+      } else {
+        status.innerHTML = '<span style="color:#b91c1c;">⚠️ Both fields required.</span>';
+        setSyncStatus('disconnected', 'No Gist');
+      }
+    }
+    function clearSyncSettings() {
+      if (!confirm('Clear Gist ID and Token? Data will no longer sync.')) return;
+      GIST_ID = '';
+      GITHUB_TOKEN = '';
+      localStorage.removeItem('hayday_gist_id');
+      localStorage.removeItem('hayday_github_token');
+      document.getElementById('gistIdInput').value = '';
+      document.getElementById('tokenInput').value = '';
+      document.getElementById('syncModalStatus').innerHTML = '<span style="color:#6b7280;">Cleared.</span>';
+      setSyncStatus('disconnected', 'Offline');
+    }
+    async function testGistConnection() {
+      const status = document.getElementById('syncModalStatus');
+      const tmpId = document.getElementById('gistIdInput').value.trim();
+      const tmpToken = document.getElementById('tokenInput').value.trim();
+      if (!tmpId || !tmpToken) {
+        status.innerHTML = '<span style="color:#b91c1c;">⚠️ Enter Gist ID and Token first.</span>';
+        return;
+      }
+      status.innerHTML = '<span style="color:#92400e;">⏳ Testing...</span>';
+      try {
+        const url = `https://api.github.com/gists/${tmpId}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${tmpToken}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const gist = await response.json();
+        if (gist.files && gist.files[GIST_FILENAME]) {
+          status.innerHTML = '<span style="color:#166534;">✅ Connection OK! File found.</span>';
+        } else {
+          status.innerHTML = `<span style="color:#92400e;">⚠️ Gist found but missing ${GIST_FILENAME}.</span>`;
+        }
+      } catch (err) {
+        status.innerHTML = '<span style="color:#b91c1c;">❌ Failed: ' + (err.message || 'unknown') + '</span>';
+      }
+    }
+    async function refreshFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Sync Settings first.');
+        return;
+      }
+      if (!confirm('Reload data from Gist? Unsaved changes will be lost.')) return;
+      const ok = await loadFromGist();
+      if (ok) {
+        refreshAll();
+      } else {
+        alert('Failed to load from Gist.');
+      }
+    }
+
+    // ---------- Ensure accounts have all required properties ----------
+    function ensureAccountsValid() {
       accounts.forEach(acc => {
         if (!acc.townLevels) acc.townLevels = {};
         townBuildings.forEach(b => { if (acc.townLevels[b.name] === undefined) acc.townLevels[b.name] = 1; });
         if (!acc.townCurrents) acc.townCurrents = {};
         exclusiveTownMaterials.forEach(m => { if (acc.townCurrents[m] === undefined) acc.townCurrents[m] = 0; });
+        if (!acc.currents) acc.currents = {};
+        trackedItems.forEach(item => { if (acc.currents[item.name] === undefined) acc.currents[item.name] = 0; });
         expansionMaterials.forEach(m => { if (acc.currents[m] === undefined) acc.currents[m] = 0; });
         if (acc.trainLevel === undefined) acc.trainLevel = 1;
         if (!acc.trainCurrents) acc.trainCurrents = {};
@@ -190,17 +416,18 @@
       });
     }
 
-    function saveData() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts }));
+    // ---------- Persistence wrapper ----------
+    async function saveData() {
+      await saveToGist();
     }
 
+    // ---------- Existing rendering functions (unchanged) ----------
     // Helper: get current farm
     let currentFarmId = null;
     function getCurrentFarm() {
       return accounts.find(a => a.id == currentFarmId);
     }
 
-    // Update UI after changes
     function refreshAll() {
       const farm = getCurrentFarm();
       if (!farm && accounts.length) {
@@ -240,13 +467,12 @@
       };
     }
 
-    // ---------- Silo/Barn rendering ----------
+    // Silo/Barn rendering
     function renderSiloBarn() {
       const farm = getCurrentFarm();
       if (!farm) return;
       const container = document.getElementById('siloBarnContainer');
       container.innerHTML = '';
-      // Compute global totals for each item
       let globalTotals = {};
       trackedItems.forEach(item => {
         let total = 0;
@@ -285,19 +511,18 @@
           const val = parseInt(e.target.value) || 0;
           farm.currents[item.name] = val;
           saveData();
-          refreshAll(); // re-render
+          refreshAll();
         });
         container.appendChild(row);
       });
     }
 
-    // ---------- Town rendering ----------
+    // Town rendering
     function renderTown() {
       const farm = getCurrentFarm();
       if (!farm) return;
       const container = document.getElementById('townContainer');
       container.innerHTML = '';
-      // Precompute global totals for all possible town materials (including shared)
       let globalTownTotals = {};
       const allTownMats = [...sharedMaterials, ...exclusiveTownMaterials];
       allTownMats.forEach(mat => {
@@ -318,7 +543,7 @@
         levelInput.addEventListener('change', (e) => {
           farm.townLevels[building.name] = parseInt(e.target.value) || 1;
           saveData();
-          renderTown(); // re-render
+          renderTown();
         });
         building.mats.forEach(mat => {
           let current = 0;
@@ -350,14 +575,13 @@
       });
     }
 
-    // ---------- Train rendering ----------
+    // Train rendering
     function renderTrain() {
       const farm = getCurrentFarm();
       if (!farm) return;
       const container = document.getElementById('trainContainer');
       container.innerHTML = '';
       const trainLevel = farm.trainLevel || 1;
-      // global totals for each bar
       let globalTrainTotals = {};
       trainMaterials.forEach(bar => {
         let total = 0;
@@ -396,21 +620,17 @@
       const globalPanel = document.getElementById('globalPanel');
       const globalDiv = document.getElementById('globalTotals');
       if (!globalPanel || !globalDiv) return;
-      // compute totals for all materials (silo/barn/exp + town exclusive + train)
       let totals = {};
-      // silo/barn/exp items
       trackedItems.forEach(it => {
         let sum = 0;
         accounts.forEach(acc => sum += (acc.currents[it.name] || 0));
         totals[it.name] = sum;
       });
-      // town exclusive
       exclusiveTownMaterials.forEach(mat => {
         let sum = 0;
         accounts.forEach(acc => sum += (acc.townCurrents[mat] || 0));
         totals[mat] = sum;
       });
-      // train bars
       trainMaterials.forEach(bar => {
         let sum = 0;
         accounts.forEach(acc => sum += (acc.trainCurrents[bar] || 0));
@@ -451,8 +671,18 @@
     }
 
     // Initialize
-    function init() {
-      loadData();
+    async function init() {
+      if (GIST_ID && GITHUB_TOKEN) {
+        const loaded = await loadFromGist();
+        if (!loaded) {
+          accounts = JSON.parse(JSON.stringify(defaultAccounts));
+          ensureAccountsValid();
+        }
+      } else {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        ensureAccountsValid();
+        setSyncStatus('disconnected', 'Offline');
+      }
       if (accounts.length) currentFarmId = accounts[0].id;
       refreshAll();
       bindLevelChanges();
