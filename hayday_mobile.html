@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hay Day Mobile Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif; }
+    .card { background: white; border-radius: 1.5rem; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .item-row { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #e5e7eb; }
+    .item-name { font-weight: 500; width: 35%; }
+    .current-input { width: 80px; text-align: center; border: 1px solid #d1d5db; border-radius: 24px; padding: 8px 4px; font-size: 0.9rem; }
+    .needed-value { font-weight: 600; min-width: 60px; text-align: right; padding: 0 8px; }
+    .surplus { background-color: #d1fae5; color: #166534; padding: 4px 12px; border-radius: 24px; display: inline-block; }
+    .deficit { background-color: #fee2e2; color: #b91c1c; padding: 4px 12px; border-radius: 24px; display: inline-block; }
+    .neutral { background-color: #f3f4f6; color: #374151; padding: 4px 12px; border-radius: 24px; display: inline-block; }
+    .global-badge { background: #e0f2fe; border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; display: inline-block; }
+    select, input.level-input { border: 1px solid #ccc; border-radius: 40px; padding: 8px 12px; background: white; }
+    .building-header { background: #fef3c7; padding: 0.5rem; border-radius: 1rem; margin-top: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .material-row { padding-left: 1rem; }
+    hr { margin: 1rem 0; }
+  </style>
+</head>
+<body class="bg-gray-100 p-4 pb-20">
+  <div class="max-w-lg mx-auto">
+    <h1 class="text-2xl font-bold text-green-800 mb-1">Hay Day Mobile Tracker</h1>
+    <p class="text-sm text-gray-600 mb-4">Global pool • One farm at a time</p>
+
+    <!-- Farm selector and global totals toggle -->
+    <div class="card">
+      <div class="flex flex-wrap gap-3 items-center justify-between">
+        <div class="flex-1">
+          <label class="block text-xs text-gray-500 mb-1">Select farm</label>
+          <select id="farmSelect" class="w-full border-gray-300 rounded-full p-2"></select>
+        </div>
+        <button id="toggleGlobalBtn" class="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm">📊 Show global</button>
+      </div>
+      <!-- Global totals panel (hidden initially) -->
+      <div id="globalPanel" class="hidden mt-4 p-3 bg-gray-50 rounded-2xl text-sm">
+        <div class="font-semibold mb-2">🌍 Global totals (all farms)</div>
+        <div id="globalTotals" class="grid grid-cols-2 gap-2"></div>
+      </div>
+    </div>
+
+    <!-- Farm quick settings: Silo/Barn/Exp & Train level (inline) -->
+    <div class="card">
+      <div class="font-semibold mb-2 flex items-center gap-2"><i class="fas fa-tachometer-alt"></i> Farm levels</div>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <div><label class="block text-gray-600">Silo</label><input id="siloLevel" type="number" class="level-input w-full"></div>
+        <div><label class="block text-gray-600">Barn</label><input id="barnLevel" type="number" class="level-input w-full"></div>
+        <div><label class="block text-gray-600">Expansion</label><input id="expLevel" type="number" class="level-input w-full"></div>
+        <div><label class="block text-gray-600">Train level</label><input id="trainLevel" type="number" class="level-input w-full"></div>
+      </div>
+      <div class="mt-3 text-xs text-gray-500">Town building levels are inside the Town section</div>
+    </div>
+
+    <!-- Silo / Barn / Expansion section -->
+    <div class="card">
+      <div class="section-title"><i class="fas fa-warehouse text-green-700"></i> Silo · Barn · Expansion</div>
+      <div id="siloBarnContainer"></div>
+    </div>
+
+    <!-- Town Buildings section -->
+    <div class="card">
+      <div class="section-title"><i class="fas fa-city text-amber-700"></i> Town Service Buildings</div>
+      <div id="townContainer"></div>
+    </div>
+
+    <!-- Personal Train section -->
+    <div class="card">
+      <div class="section-title"><i class="fas fa-train text-purple-700"></i> Personal Train</div>
+      <div id="trainContainer"></div>
+    </div>
+
+    <div class="text-center text-xs text-gray-400 mt-6">Data shared with desktop version via localStorage</div>
+  </div>
+
+  <script>
+    // -------- Data structure (same as desktop) --------
+    let accounts = [];
+    const STORAGE_KEY = 'haydayGlobalPoolV5';  // must match desktop key
+
+    // Item definitions
+    const trackedItems = [
+      { name: "Nails", category: "silo", icon: "fas fa-gripfire" },
+      { name: "Screws", category: "silo", icon: "fas fa-cog" },
+      { name: "Wood Panels", category: "silo", icon: "fas fa-tree" },
+      { name: "Bolts", category: "barn", icon: "fas fa-bolt" },
+      { name: "Planks", category: "barn", icon: "fas fa-border-all" },
+      { name: "Duct Tape", category: "barn", icon: "fas fa-tape" },
+      { name: "Land Deed", category: "expansion", icon: "fas fa-file-signature" },
+      { name: "Mallet", category: "expansion", icon: "fas fa-gavel" },
+      { name: "Marker Stake", category: "expansion", icon: "fas fa-map-marker-alt" }
+    ];
+
+    const townBuildings = [
+      { name: "Grocery Store", mats: ["Bolts", "Duct Tape", "Stone Block"] },
+      { name: "Cinema", mats: ["Hammer", "Nails", "Wood Panels"] },
+      { name: "Diner", mats: ["Paint Bucket", "Planks", "Screws"] },
+      { name: "Bed and Breakfast", mats: ["Brick", "Hand Drill", "Paint Bucket"] },
+      { name: "Spa", mats: ["Brick", "Stone Block", "Tar Bucket"] },
+      { name: "Gift Shop", mats: ["Hammer", "Stone Block", "Tar Bucket"] },
+      { name: "Beach Café", mats: ["Hammer", "Hand Drill", "Tar Bucket"] },
+      { name: "Town Hall", mats: ["Hammer", "Paint Bucket", "Stone Block"] },
+      { name: "Train Station", mats: ["Brick", "Hand Drill", "Tar Bucket"] }
+    ];
+
+    const sharedMaterials = ["Nails", "Screws", "Wood Panels", "Bolts", "Planks", "Duct Tape"];
+    const exclusiveTownMaterials = ["Brick", "Hammer", "Hand Drill", "Paint Bucket", "Stone Block", "Tar Bucket"];
+    const expansionMaterials = ["Land Deed", "Mallet", "Marker Stake"];
+    const trainMaterials = ["Refined Coal", "Iron Bar", "Silver Bar", "Gold Bar", "Platinum Bar"];
+
+    // Train requirements table (same as desktop)
+    const trainRequirementsTable = {
+      2: {"Refined Coal":5,"Iron Bar":5,"Silver Bar":5,"Gold Bar":0,"Platinum Bar":0},
+      3: {"Refined Coal":5,"Iron Bar":5,"Silver Bar":0,"Gold Bar":5,"Platinum Bar":0},
+      4: {"Refined Coal":5,"Iron Bar":5,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":5},
+      5: {"Refined Coal":10,"Iron Bar":10,"Silver Bar":10,"Gold Bar":0,"Platinum Bar":0},
+      6: {"Refined Coal":10,"Iron Bar":10,"Silver Bar":0,"Gold Bar":10,"Platinum Bar":0},
+      7: {"Refined Coal":10,"Iron Bar":10,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":10},
+      8: {"Refined Coal":15,"Iron Bar":15,"Silver Bar":15,"Gold Bar":0,"Platinum Bar":0},
+      9: {"Refined Coal":15,"Iron Bar":15,"Silver Bar":0,"Gold Bar":15,"Platinum Bar":0},
+      10: {"Refined Coal":15,"Iron Bar":15,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":15},
+      11: {"Refined Coal":20,"Iron Bar":20,"Silver Bar":20,"Gold Bar":0,"Platinum Bar":0},
+      12: {"Refined Coal":20,"Iron Bar":20,"Silver Bar":0,"Gold Bar":20,"Platinum Bar":0},
+      13: {"Refined Coal":20,"Iron Bar":20,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":20},
+      14: {"Refined Coal":25,"Iron Bar":25,"Silver Bar":25,"Gold Bar":0,"Platinum Bar":0},
+      15: {"Refined Coal":25,"Iron Bar":25,"Silver Bar":0,"Gold Bar":25,"Platinum Bar":0},
+      16: {"Refined Coal":25,"Iron Bar":25,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":25},
+      17: {"Refined Coal":30,"Iron Bar":30,"Silver Bar":30,"Gold Bar":0,"Platinum Bar":0},
+      18: {"Refined Coal":30,"Iron Bar":30,"Silver Bar":0,"Gold Bar":30,"Platinum Bar":0},
+      19: {"Refined Coal":30,"Iron Bar":30,"Silver Bar":0,"Gold Bar":0,"Platinum Bar":30}
+    };
+    function getTrainRequirements(level) {
+      if (level <= 1) return { "Refined Coal":0, "Iron Bar":0, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":0 };
+      if (level <= 19) return trainRequirementsTable[level];
+      const group = Math.floor((level - 2) / 3);
+      const base = 5 + group * 5;
+      const offset = (level - 2) % 3;
+      if (offset === 0) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":base, "Gold Bar":0, "Platinum Bar":0 };
+      else if (offset === 1) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":base, "Platinum Bar":0 };
+      else return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":base };
+    }
+
+    // Load/save
+    function loadData() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        accounts = JSON.parse(saved).accounts;
+      }
+      if (!accounts || accounts.length === 0) {
+        // fallback default data
+        accounts = [
+          { id: 1, name: "Farm A", siloLevel: 48, barnLevel: 60, expansionLevel: 20,
+            currents: { "Nails":20, "Screws":0, "Wood Panels":0, "Bolts":0, "Planks":0, "Duct Tape":0, "Land Deed":0, "Mallet":0, "Marker Stake":0 },
+            townLevels: { "Grocery Store":17, "Cinema":5, "Diner":12, "Bed and Breakfast":8, "Spa":20, "Gift Shop":3, "Beach Café":6, "Town Hall":10, "Train Station":4 },
+            townCurrents: { "Brick":0, "Hammer":0, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+            trainLevel: 10,
+            trainCurrents: { "Refined Coal":0, "Iron Bar":0, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":0 }
+          },
+          { id: 2, name: "Farm B", siloLevel: 50, barnLevel: 55, expansionLevel: 18,
+            currents: { "Nails":10, "Screws":5, "Wood Panels":3, "Bolts":2, "Planks":1, "Duct Tape":4, "Land Deed":2, "Mallet":1, "Marker Stake":0 },
+            townLevels: { "Grocery Store":10, "Cinema":4, "Diner":8, "Bed and Breakfast":6, "Spa":12, "Gift Shop":2, "Beach Café":4, "Town Hall":7, "Train Station":3 },
+            townCurrents: { "Brick":1, "Hammer":2, "Hand Drill":0, "Paint Bucket":1, "Stone Block":0, "Tar Bucket":0 },
+            trainLevel: 15,
+            trainCurrents: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":2, "Gold Bar":0, "Platinum Bar":0 }
+          },
+          { id: 3, name: "Farm C", siloLevel: 30, barnLevel: 40, expansionLevel: 12,
+            currents: { "Nails":30, "Screws":8, "Wood Panels":12, "Bolts":6, "Planks":10, "Duct Tape":5, "Land Deed":3, "Mallet":4, "Marker Stake":2 },
+            townLevels: { "Grocery Store":5, "Cinema":3, "Diner":4, "Bed and Breakfast":3, "Spa":7, "Gift Shop":1, "Beach Café":2, "Town Hall":4, "Train Station":2 },
+            townCurrents: { "Brick":0, "Hammer":1, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+            trainLevel: 7,
+            trainCurrents: { "Refined Coal":2, "Iron Bar":3, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":1 }
+          }
+        ];
+      }
+      // ensure all structures exist
+      accounts.forEach(acc => {
+        if (!acc.townLevels) acc.townLevels = {};
+        townBuildings.forEach(b => { if (acc.townLevels[b.name] === undefined) acc.townLevels[b.name] = 1; });
+        if (!acc.townCurrents) acc.townCurrents = {};
+        exclusiveTownMaterials.forEach(m => { if (acc.townCurrents[m] === undefined) acc.townCurrents[m] = 0; });
+        expansionMaterials.forEach(m => { if (acc.currents[m] === undefined) acc.currents[m] = 0; });
+        if (acc.trainLevel === undefined) acc.trainLevel = 1;
+        if (!acc.trainCurrents) acc.trainCurrents = {};
+        trainMaterials.forEach(m => { if (acc.trainCurrents[m] === undefined) acc.trainCurrents[m] = 0; });
+      });
+    }
+
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ accounts }));
+    }
+
+    // Helper: get current farm
+    let currentFarmId = null;
+    function getCurrentFarm() {
+      return accounts.find(a => a.id == currentFarmId);
+    }
+
+    // Update UI after changes
+    function refreshAll() {
+      const farm = getCurrentFarm();
+      if (!farm && accounts.length) {
+        currentFarmId = accounts[0].id;
+      }
+      if (accounts.length === 0) return;
+      updateFarmSelector();
+      if (farm) {
+        document.getElementById('siloLevel').value = farm.siloLevel;
+        document.getElementById('barnLevel').value = farm.barnLevel;
+        document.getElementById('expLevel').value = farm.expansionLevel;
+        document.getElementById('trainLevel').value = farm.trainLevel;
+        renderSiloBarn();
+        renderTown();
+        renderTrain();
+      } else {
+        document.getElementById('siloBarnContainer').innerHTML = '<div class="text-gray-500">No farms</div>';
+        document.getElementById('townContainer').innerHTML = '';
+        document.getElementById('trainContainer').innerHTML = '';
+      }
+      updateGlobalTotals();
+    }
+
+    function updateFarmSelector() {
+      const select = document.getElementById('farmSelect');
+      select.innerHTML = '';
+      accounts.forEach(acc => {
+        const option = document.createElement('option');
+        option.value = acc.id;
+        option.textContent = acc.name;
+        if (acc.id == currentFarmId) option.selected = true;
+        select.appendChild(option);
+      });
+      select.onchange = () => {
+        currentFarmId = parseInt(select.value);
+        refreshAll();
+      };
+    }
+
+    // ---------- Silo/Barn rendering ----------
+    function renderSiloBarn() {
+      const farm = getCurrentFarm();
+      if (!farm) return;
+      const container = document.getElementById('siloBarnContainer');
+      container.innerHTML = '';
+      // Compute global totals for each item
+      let globalTotals = {};
+      trackedItems.forEach(item => {
+        let total = 0;
+        accounts.forEach(acc => { total += (acc.currents[item.name] || 0); });
+        globalTotals[item.name] = total;
+      });
+
+      let lastCategory = null;
+      trackedItems.forEach(item => {
+        if (item.category !== lastCategory) {
+          const catDiv = document.createElement('div');
+          catDiv.className = 'font-semibold text-sm mt-2 mb-1 text-green-800';
+          catDiv.innerText = item.category.toUpperCase();
+          container.appendChild(catDiv);
+          lastCategory = item.category;
+        }
+        let farmLevel = 0;
+        if (item.category === 'silo') farmLevel = farm.siloLevel;
+        else if (item.category === 'barn') farmLevel = farm.barnLevel;
+        else farmLevel = farm.expansionLevel;
+        const totalCurrent = globalTotals[item.name];
+        const needed = totalCurrent - farmLevel;
+        const neededClass = needed > 0 ? 'surplus' : (needed < 0 ? 'deficit' : 'neutral');
+        const neededText = needed > 0 ? `+${needed}` : needed === 0 ? '0' : `${needed}`;
+        const current = farm.currents[item.name] || 0;
+
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        row.innerHTML = `
+          <div class="item-name"><i class="${item.icon} mr-2"></i>${item.name}</div>
+          <div><input type="number" value="${current}" class="current-input" data-item="${item.name}" data-category="siloBarn"></div>
+          <div class="needed-value"><span class="${neededClass}">${neededText}</span></div>
+        `;
+        const input = row.querySelector('input');
+        input.addEventListener('change', (e) => {
+          const val = parseInt(e.target.value) || 0;
+          farm.currents[item.name] = val;
+          saveData();
+          refreshAll(); // re-render
+        });
+        container.appendChild(row);
+      });
+    }
+
+    // ---------- Town rendering ----------
+    function renderTown() {
+      const farm = getCurrentFarm();
+      if (!farm) return;
+      const container = document.getElementById('townContainer');
+      container.innerHTML = '';
+      // Precompute global totals for all possible town materials (including shared)
+      let globalTownTotals = {};
+      const allTownMats = [...sharedMaterials, ...exclusiveTownMaterials];
+      allTownMats.forEach(mat => {
+        let total = 0;
+        accounts.forEach(acc => {
+          if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) total += (acc.currents[mat] || 0);
+          else if (exclusiveTownMaterials.includes(mat)) total += (acc.townCurrents[mat] || 0);
+        });
+        globalTownTotals[mat] = total;
+      });
+
+      townBuildings.forEach(building => {
+        const level = farm.townLevels[building.name] || 1;
+        const buildingDiv = document.createElement('div');
+        buildingDiv.className = 'mt-3 border-t pt-2';
+        buildingDiv.innerHTML = `<div class="building-header"><span><i class="fas fa-store"></i> ${building.name}</span><span>Level <input type="number" value="${level}" class="level-input w-20" data-building="${building.name}"></span></div>`;
+        const levelInput = buildingDiv.querySelector('input');
+        levelInput.addEventListener('change', (e) => {
+          farm.townLevels[building.name] = parseInt(e.target.value) || 1;
+          saveData();
+          renderTown(); // re-render
+        });
+        building.mats.forEach(mat => {
+          let current = 0;
+          if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) current = farm.currents[mat] || 0;
+          else current = farm.townCurrents[mat] || 0;
+          const required = level;
+          const totalCurrent = globalTownTotals[mat];
+          const needed = totalCurrent - required;
+          const neededClass = needed > 0 ? 'surplus' : (needed < 0 ? 'deficit' : 'neutral');
+          const neededText = needed > 0 ? `+${needed}` : needed === 0 ? '0' : `${needed}`;
+          const matRow = document.createElement('div');
+          matRow.className = 'item-row material-row';
+          matRow.innerHTML = `
+            <div class="item-name pl-4 text-sm">${mat}</div>
+            <div><input type="number" value="${current}" class="current-input" data-mat="${mat}" data-building="${building.name}"></div>
+            <div class="needed-value"><span class="${neededClass}">${neededText}</span></div>
+          `;
+          const matInput = matRow.querySelector('input');
+          matInput.addEventListener('change', (e) => {
+            const val = parseInt(e.target.value) || 0;
+            if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) farm.currents[mat] = val;
+            else farm.townCurrents[mat] = val;
+            saveData();
+            refreshAll();
+          });
+          buildingDiv.appendChild(matRow);
+        });
+        container.appendChild(buildingDiv);
+      });
+    }
+
+    // ---------- Train rendering ----------
+    function renderTrain() {
+      const farm = getCurrentFarm();
+      if (!farm) return;
+      const container = document.getElementById('trainContainer');
+      container.innerHTML = '';
+      const trainLevel = farm.trainLevel || 1;
+      // global totals for each bar
+      let globalTrainTotals = {};
+      trainMaterials.forEach(bar => {
+        let total = 0;
+        accounts.forEach(acc => { total += (acc.trainCurrents[bar] || 0); });
+        globalTrainTotals[bar] = total;
+      });
+
+      trainMaterials.forEach(bar => {
+        const required = getTrainRequirements(trainLevel)[bar];
+        const current = farm.trainCurrents[bar] || 0;
+        const totalCurrent = globalTrainTotals[bar];
+        const needed = totalCurrent - required;
+        const neededClass = needed > 0 ? 'surplus' : (needed < 0 ? 'deficit' : 'neutral');
+        const neededText = needed > 0 ? `+${needed}` : needed === 0 ? '0' : `${needed}`;
+        const isRequired = required > 0;
+        const row = document.createElement('div');
+        row.className = 'item-row';
+        if (!isRequired) row.style.opacity = '0.6';
+        row.innerHTML = `
+          <div class="item-name"><i class="fas fa-gem"></i> ${bar}</div>
+          <div><input type="number" value="${current}" class="current-input" data-bar="${bar}"></div>
+          <div class="needed-value"><span class="${neededClass}">${neededText}</span></div>
+        `;
+        const input = row.querySelector('input');
+        input.addEventListener('change', (e) => {
+          farm.trainCurrents[bar] = parseInt(e.target.value) || 0;
+          saveData();
+          refreshAll();
+        });
+        container.appendChild(row);
+      });
+    }
+
+    // Global totals panel
+    function updateGlobalTotals() {
+      const globalPanel = document.getElementById('globalPanel');
+      const globalDiv = document.getElementById('globalTotals');
+      if (!globalPanel || !globalDiv) return;
+      // compute totals for all materials (silo/barn/exp + town exclusive + train)
+      let totals = {};
+      // silo/barn/exp items
+      trackedItems.forEach(it => {
+        let sum = 0;
+        accounts.forEach(acc => sum += (acc.currents[it.name] || 0));
+        totals[it.name] = sum;
+      });
+      // town exclusive
+      exclusiveTownMaterials.forEach(mat => {
+        let sum = 0;
+        accounts.forEach(acc => sum += (acc.townCurrents[mat] || 0));
+        totals[mat] = sum;
+      });
+      // train bars
+      trainMaterials.forEach(bar => {
+        let sum = 0;
+        accounts.forEach(acc => sum += (acc.trainCurrents[bar] || 0));
+        totals[bar] = sum;
+      });
+      globalDiv.innerHTML = Object.entries(totals).map(([k,v]) => `<div class="flex justify-between"><span>${k}:</span><span class="font-mono">${v}</span></div>`).join('');
+    }
+
+    // Toggle global panel
+    document.getElementById('toggleGlobalBtn')?.addEventListener('click', () => {
+      const panel = document.getElementById('globalPanel');
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) updateGlobalTotals();
+    });
+
+    // Listen to level changes from inline inputs
+    function bindLevelChanges() {
+      const siloInput = document.getElementById('siloLevel');
+      const barnInput = document.getElementById('barnLevel');
+      const expInput = document.getElementById('expLevel');
+      const trainInput = document.getElementById('trainLevel');
+      const saveLevel = (field) => (e) => {
+        const farm = getCurrentFarm();
+        if (!farm) return;
+        farm[field] = parseInt(e.target.value) || 1;
+        saveData();
+        refreshAll();
+      };
+      siloInput?.addEventListener('change', saveLevel('siloLevel'));
+      barnInput?.addEventListener('change', saveLevel('barnLevel'));
+      expInput?.addEventListener('change', saveLevel('expansionLevel'));
+      trainInput?.addEventListener('change', (e) => {
+        const farm = getCurrentFarm();
+        if (farm) farm.trainLevel = parseInt(e.target.value) || 1;
+        saveData();
+        refreshAll();
+      });
+    }
+
+    // Initialize
+    function init() {
+      loadData();
+      if (accounts.length) currentFarmId = accounts[0].id;
+      refreshAll();
+      bindLevelChanges();
+    }
+    init();
+  </script>
+</body>
+</html>
