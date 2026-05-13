@@ -150,7 +150,7 @@
 
     // -------- Data structure --------
     let accounts = [];
-    const STORAGE_KEY = 'haydayGlobalPoolV5';  // kept for reference, no longer used for farm data
+    const STORAGE_KEY = 'haydayGlobalPoolV5';  // old localStorage key for migration
 
     // Item definitions
     const trackedItems = [
@@ -239,6 +239,21 @@
       }
     ];
 
+    // ---------- Load from old localStorage (migration) ----------
+    function loadFromLocalStorage() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.accounts && parsed.accounts.length > 0) {
+            accounts = parsed.accounts;
+            return true;
+          }
+        } catch (e) { /* ignore parse errors */ }
+      }
+      return false;
+    }
+
     // ---------- Sync Status UI ----------
     function setSyncStatus(state, msg) {
       const el = document.getElementById('mobileSyncStatus');
@@ -278,10 +293,17 @@
         }
         const content = gist.files[GIST_FILENAME].content;
         const data = JSON.parse(content);
-        accounts = data.accounts || [];
-        ensureAccountsValid();
-        setSyncStatus('connected', 'Synced');
-        return true;
+        // Only overwrite if Gist has actual data (not empty accounts)
+        if (data.accounts && data.accounts.length > 0) {
+          accounts = data.accounts;
+          ensureAccountsValid();
+          setSyncStatus('connected', 'Synced');
+          return true;
+        } else {
+          // Gist exists but has no data - keep local accounts as-is
+          setSyncStatus('connected', 'Gist empty, using local');
+          return true;
+        }
       } catch (err) {
         console.error('loadFromGist error:', err);
         setSyncStatus('disconnected', 'Load failed');
@@ -335,19 +357,59 @@
     function closeSyncModal() {
       document.getElementById('syncModal').classList.add('hidden');
     }
-    function saveSyncSettings() {
-      GIST_ID = document.getElementById('gistIdInput').value.trim();
-      GITHUB_TOKEN = document.getElementById('tokenInput').value.trim();
+    async function saveSyncSettings() {
+      const newId = document.getElementById('gistIdInput').value.trim();
+      const newToken = document.getElementById('tokenInput').value.trim();
+      if (!newId || !newToken) {
+        document.getElementById('syncModalStatus').innerHTML = '<span style="color:#b91c1c;">⚠️ Both fields required.</span>';
+        return;
+      }
+      GIST_ID = newId;
+      GITHUB_TOKEN = newToken;
       localStorage.setItem('hayday_gist_id', GIST_ID);
       localStorage.setItem('hayday_github_token', GITHUB_TOKEN);
+
       const status = document.getElementById('syncModalStatus');
-      if (GIST_ID && GITHUB_TOKEN) {
-        status.innerHTML = '<span style="color:#166534;">✅ Saved. Testing...</span>';
-        testGistConnection();
-      } else {
-        status.innerHTML = '<span style="color:#b91c1c;">⚠️ Both fields required.</span>';
-        setSyncStatus('disconnected', 'No Gist');
+      status.innerHTML = '<span style="color:#92400e;">⏳ Testing...</span>';
+
+      try {
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const gist = await response.json();
+
+        if (gist.files && gist.files[GIST_FILENAME]) {
+          const content = gist.files[GIST_FILENAME].content;
+          const data = JSON.parse(content);
+          if (data.accounts && data.accounts.length > 0) {
+            accounts = data.accounts;
+            ensureAccountsValid();
+            status.innerHTML = '<span style="color:#166534;">✅ Connected. Loaded data from Gist.</span>';
+            setSyncStatus('connected', 'Synced');
+          } else {
+            if (accounts.length > 0) {
+              await saveToGist();
+              status.innerHTML = '<span style="color:#166534;">✅ Connected. Your local data uploaded to Gist.</span>';
+            } else {
+              status.innerHTML = '<span style="color:#166534;">✅ Connected. Gist empty.</span>';
+            }
+            setSyncStatus('connected', 'Synced');
+          }
+        } else {
+          status.innerHTML = `<span style="color:#92400e;">⚠️ Gist missing ${GIST_FILENAME}. Creating...</span>`;
+          await saveToGist();
+          status.innerHTML = '<span style="color:#166534;">✅ Created file in Gist.</span>';
+          setSyncStatus('connected', 'Synced');
+        }
+      } catch (err) {
+        status.innerHTML = '<span style="color:#b91c1c;">❌ Failed: ' + (err.message || 'unknown') + '</span>';
+        setSyncStatus('disconnected', 'Connection failed');
       }
+
+      refreshAll();
     }
     function clearSyncSettings() {
       if (!confirm('Clear Gist ID and Token? Data will no longer sync.')) return;
@@ -421,8 +483,7 @@
       await saveToGist();
     }
 
-    // ---------- Existing rendering functions (unchanged) ----------
-    // Helper: get current farm
+    // ---------- Existing rendering functions ----------
     let currentFarmId = null;
     function getCurrentFarm() {
       return accounts.find(a => a.id == currentFarmId);
@@ -672,17 +733,23 @@
 
     // Initialize
     async function init() {
+      // First, try to load from old localStorage (migration path)
+      const hadLocalData = loadFromLocalStorage();
+
       if (GIST_ID && GITHUB_TOKEN) {
-        const loaded = await loadFromGist();
-        if (!loaded) {
-          accounts = JSON.parse(JSON.stringify(defaultAccounts));
-          ensureAccountsValid();
-        }
+        // Gist is configured - try loading from Gist
+        // This will only overwrite accounts if Gist has data (non-empty accounts array)
+        await loadFromGist();
       } else {
-        accounts = JSON.parse(JSON.stringify(defaultAccounts));
-        ensureAccountsValid();
-        setSyncStatus('disconnected', 'Offline');
+        if (!hadLocalData) {
+          accounts = JSON.parse(JSON.stringify(defaultAccounts));
+          setSyncStatus('disconnected', 'Offline');
+        } else {
+          setSyncStatus('disconnected', 'Not synced');
+        }
       }
+
+      ensureAccountsValid();
       if (accounts.length) currentFarmId = accounts[0].id;
       refreshAll();
       bindLevelChanges();
