@@ -629,13 +629,16 @@
       });
 
       townBuildings.forEach(building => {
-        const level = farm.townLevels[building.name] || 1;
+        const level = (farm.townLevels[building.name] !== undefined) ? farm.townLevels[building.name] : 1;
         const buildingDiv = document.createElement('div');
         buildingDiv.className = 'mt-3 border-t pt-2';
         buildingDiv.innerHTML = `<div class="building-header"><span><i class="fas fa-store"></i> ${building.name}</span><span>Level <input type="number" value="${level}" class="level-input w-20" data-building="${building.name}"></span></div>`;
         const levelInput = buildingDiv.querySelector('input');
         levelInput.addEventListener('change', (e) => {
-          farm.townLevels[building.name] = parseInt(e.target.value) || 1;
+          let num = parseInt(e.target.value);
+          if (isNaN(num)) num = 1;
+          if (num < 0) num = 0;
+          farm.townLevels[building.name] = num;
           saveData();
           renderTown();
         });

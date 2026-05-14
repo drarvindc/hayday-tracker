@@ -637,7 +637,13 @@
     }
     function updateTownLevel(accId, buildingName, value) {
       const acc = accounts.find(a => a.id === accId);
-      if (acc) { acc.townLevels[buildingName] = parseInt(value) || 1; saveData(); }
+      if (acc) {
+        let num = parseInt(value);
+        if (isNaN(num)) num = 1;
+        if (num < 0) num = 0;
+        acc.townLevels[buildingName] = num;
+        saveData();
+      }
     }
     function updateTrainLevel(accId, value) {
       const acc = accounts.find(a => a.id === accId);
@@ -744,7 +750,7 @@
       townBuildings.forEach(building => {
         let buildingRow = `<tr class="bg-amber-700 text-white"><td class="item-col font-bold"><i class="fas fa-store mr-2"></i> ${building.name}<\/td>`;
         accounts.forEach(acc => {
-          const level = acc.townLevels[building.name] || 1;
+          const level = (acc.townLevels[building.name] !== undefined) ? acc.townLevels[building.name] : 1;
           buildingRow += `<td colspan="2" class="p-2"><input type="number" value="${level}" class="building-level-input" onchange="updateTownLevel(${acc.id}, '${building.name}', this.value)"><\/td>`;
         });
         buildingRow += `<\/tr>`;
@@ -760,7 +766,7 @@
             let currentValue = 0;
             if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) currentValue = acc.currents[mat] || 0;
             else if (exclusiveTownMaterials.includes(mat)) currentValue = acc.townCurrents[mat] || 0;
-            const required = acc.townLevels[building.name] || 1;
+            const required = (acc.townLevels[building.name] !== undefined) ? acc.townLevels[building.name] : 1;
             const needed = totalCurrent - required;
             const neededText = needed > 0 ? `+${needed}` : needed === 0 ? '0' : `${needed}`;
             const neededClass = needed > 0 ? 'surplus-cell' : (needed < 0 ? 'deficit-cell' : 'neutral-cell');
