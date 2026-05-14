@@ -161,13 +161,21 @@
       </button>
       <span class="flex-1"></span>
       <!-- Sync controls -->
+      <span id="lastSyncDisplay" class="text-xs text-gray-500"></span>
       <span id="syncStatus" class="sync-disconnected"><span class="sync-dot sync-dot-red"></span> Not synced</span>
+      <button onclick="pullFromGist()" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+        <i class="fas fa-download"></i> Pull
+      </button>
+      <button onclick="pushToGist()" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+        <i class="fas fa-upload"></i> Push
+      </button>
       <button onclick="openSyncModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
         <i class="fas fa-cog"></i> Sync Settings
       </button>
       <button id="refreshBtn" onclick="refreshFromGist()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
         <i class="fas fa-sync-alt"></i> Refresh
       </button>
+
     </div>
 
     <!-- Sync Settings Modal -->
@@ -247,7 +255,9 @@
     // ---------- GitHub Gist Configuration ----------
     let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
     let GITHUB_TOKEN = localStorage.getItem('hayday_github_token') || '';
+    let lastSyncTime = localStorage.getItem('hayday_last_sync_time') || '';
     const GIST_FILENAME = 'hayday_data.json';
+
 
     // ---------- Farm Data ----------
     let accounts = [];
@@ -402,6 +412,13 @@
         // Only overwrite if Gist has actual data (not empty accounts)
         if (data.accounts && data.accounts.length > 0) {
           accounts = data.accounts;
+          // Grab timestamp from Gist data or metadata
+          if (data.lastSync) {
+            lastSyncTime = data.lastSync;
+          } else if (gist.updated_at) {
+            lastSyncTime = gist.updated_at;
+          }
+          localStorage.setItem('hayday_last_sync_time', lastSyncTime);
           ensureAccountsValid();
           setSyncStatus('connected', 'Synced via Gist');
           return true;
@@ -410,6 +427,7 @@
           setSyncStatus('connected', 'Gist empty, using local');
           return true;
         }
+
       } catch (err) {
         console.error('loadFromGist error:', err);
         setSyncStatus('disconnected', 'Load failed: ' + (err.message || 'unknown error'));
@@ -427,10 +445,11 @@
         const payload = {
           files: {
             [GIST_FILENAME]: {
-              content: JSON.stringify({ accounts }, null, 2)
+              content: JSON.stringify({ accounts, lastSync: new Date().toISOString() }, null, 2)
             }
           }
         };
+
         const url = `https://api.github.com/gists/${GIST_ID}`;
         const response = await fetch(url, {
           method: 'PATCH',
@@ -444,8 +463,11 @@
           const errText = await response.text();
           throw new Error(`HTTP ${response.status}: ${errText}`);
         }
+        lastSyncTime = new Date().toISOString();
+        localStorage.setItem('hayday_last_sync_time', lastSyncTime);
         setSyncStatus('connected', 'Synced via Gist');
         return true;
+
       } catch (err) {
         console.error('saveToGist error:', err);
         setSyncStatus('disconnected', 'Save failed: ' + (err.message || 'unknown error'));
@@ -590,7 +612,81 @@
       }
     }
 
+    // ---------- Format Sync Time ----------
+    function formatSyncTime(isoString) {
+      if (!isoString) return 'never';
+      try {
+        const now = new Date();
+        const date = new Date(isoString);
+        const diffMin = Math.floor((now - date) / 60000);
+        if (diffMin < 1) return 'just now';
+        if (diffMin < 60) return `${diffMin} minutes ago`;
+        return date.toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+      } catch(e) {
+        return 'unknown';
+      }
+    }
+
+    function updateLastSyncDisplay() {
+      const el = document.getElementById('lastSyncDisplay');
+      if (!el) return;
+      if (lastSyncTime) {
+        el.textContent = `🕒 Last sync: ${formatSyncTime(lastSyncTime)}`;
+      } else {
+        el.textContent = '';
+      }
+    }
+
+    // ---------- Pull from Gist (no confirm) ----------
+    async function pullFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Sync Settings first (Gist ID + Token).');
+        return;
+      }
+      const ok = await loadFromGist();
+      if (ok) {
+        renderAccounts();
+        renderSiloBarnTable();
+        renderTownTable();
+        renderTrainTable();
+        updateLastSyncDisplay();
+        showToast('Data reloaded from Gist');
+      } else {
+        alert('Failed to load from Gist. Check credentials.');
+      }
+    }
+
+    // ---------- Push to Gist ----------
+    async function pushToGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Sync Settings first (Gist ID + Token).');
+        return;
+      }
+      const ok = await saveToGist();
+      if (ok) {
+        updateLastSyncDisplay();
+        showToast('Data pushed to Gist');
+      } else {
+        alert('Failed to push to Gist. Check credentials.');
+      }
+    }
+
+    // ---------- Simple Toast ----------
+    function showToast(msg) {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#166534; color:white; padding:10px 24px; border-radius:40px; font-size:14px; font-weight:600; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,0.2); transition:opacity 0.3s;';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.style.opacity = '1';
+      setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+    }
+
     // ---------- Ensure accounts have all required properties ----------
+
     function ensureAccountsValid() {
       accounts.forEach(acc => {
         if (!acc.townLevels) acc.townLevels = {};

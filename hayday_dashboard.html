@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hay Day Farm Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif; }
+    .progress-bar { height: 8px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease; }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .heatmap-cell { min-width: 100px; text-align: center; padding: 10px 8px; font-weight: 600; font-size: 0.9rem; }
+    .card-shadow { box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .tooltip-box { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+      background: #1f2937; color: white; padding: 6px 10px; border-radius: 8px; font-size: 0.75rem;
+      white-space: nowrap; z-index: 10; pointer-events: none; }
+    .tooltip-trigger:hover .tooltip-box { display: block; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+  <!-- Navigation Bar -->
+  <div class="bg-white border-b border-gray-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <h1 class="text-xl font-bold text-green-800"><i class="fas fa-chart-pie mr-2"></i>Hay Day Farm Dashboard</h1>
+        <span id="syncBadge" class="text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full">Loading...</span>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <span id="lastSyncDisplay" class="text-xs text-gray-500"></span>
+        <button id="pullFromGistBtn" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-xs">
+          <i class="fas fa-download mr-1"></i> Pull
+        </button>
+        <button id="pushToGistBtn" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-xs">
+          <i class="fas fa-upload mr-1"></i> Push
+        </button>
+        <button id="refreshBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full">
+          <i class="fas fa-sync-alt mr-1"></i> Refresh
+        </button>
+        <a href="hayday_tracker.html" class="text-green-700 hover:text-green-900 underline flex items-center gap-1">
+          <i class="fas fa-desktop"></i> Desktop
+        </a>
+        <a href="hayday_mobile.html" class="text-amber-700 hover:text-amber-900 underline flex items-center gap-1">
+          <i class="fas fa-mobile-alt"></i> Mobile
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="max-w-7xl mx-auto px-4 py-6">
+
+    <!-- Farm Progress Cards -->
+    <div id="cardsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-10"></div>
+
+    <!-- Material Surplus/Deficit Heatmap -->
+    <div class="bg-white rounded-3xl shadow p-6">
+      <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <i class="fas fa-fire text-orange-500"></i> Silo · Barn · Expansion — Surplus / Deficit Heatmap
+      </h2>
+      <p class="text-xs text-gray-500 mb-3">Each cell shows <strong>global pool surplus</strong> (total current − farm requirement). Hover for details.</p>
+      <div class="overflow-x-auto">
+        <table id="heatmapTable" class="w-full text-sm border-collapse">
+          <thead id="heatmapHead"></thead>
+          <tbody id="heatmapBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 🚀 Ready to Upgrade Section -->
+    <div class="bg-white rounded-3xl shadow p-6 mt-8">
+      <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+        <span>🚀 Ready to Upgrade</span>
+      </h2>
+      <div id="readyUpgradesContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6"></div>
+      <div id="transferSuggestionsContainer">
+        <h3 class="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+          <i class="fas fa-truck-moving text-blue-500"></i> Most Urgent Transfers
+        </h3>
+        <ul id="transferList" class="list-disc pl-5 space-y-1.5 text-sm text-gray-700"></ul>
+      </div>
+      <div id="deficitsAwaitingContainer" class="mt-4">
+        <h4 class="font-medium text-gray-700 mb-2 flex items-center gap-2">
+          <i class="fas fa-hourglass-half text-orange-500"></i> Deficits Awaiting Items (no surplus available)
+        </h4>
+        <ul id="awaitingList" class="list-disc pl-5 space-y-1 text-sm text-gray-600"></ul>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ---------- GitHub Gist Configuration ----------
+    let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
+    let GITHUB_TOKEN = localStorage.getItem('hayday_github_token') || '';
+    let lastSyncTime = localStorage.getItem('hayday_last_sync_time') || '';
+    const GIST_FILENAME = 'hayday_data.json';
+
+    // ---------- Data ----------
+    let accounts = [];
+    let dataSource = 'localStorage';
+
+    const trackedItems = [
+      { name: "Nails", category: "silo", icon: "fas fa-gripfire" },
+      { name: "Screws", category: "silo", icon: "fas fa-cog" },
+      { name: "Wood Panels", category: "silo", icon: "fas fa-tree" },
+      { name: "Bolts", category: "barn", icon: "fas fa-bolt" },
+      { name: "Planks", category: "barn", icon: "fas fa-border-all" },
+      { name: "Duct Tape", category: "barn", icon: "fas fa-tape" },
+      { name: "Land Deed", category: "expansion", icon: "fas fa-file-signature" },
+      { name: "Mallet", category: "expansion", icon: "fas fa-gavel" },
+      { name: "Marker Stake", category: "expansion", icon: "fas fa-map-marker-alt" }
+    ];
+
+    const townBuildings = [
+      { name: "Grocery Store", mats: ["Bolts", "Duct Tape", "Stone Block"] },
+      { name: "Cinema", mats: ["Nails", "Wood Panels", "Hammer"] },
+      { name: "Diner", mats: ["Planks", "Screws", "Paint Bucket"] },
+      { name: "Bed and Breakfast", mats: ["Hand Drill", "Brick", "Paint Bucket"] },
+      { name: "Spa", mats: ["Brick", "Tar Bucket", "Stone Block"] },
+      { name: "Gift Shop", mats: ["Stone Block", "Tar Bucket", "Hammer"] },
+      { name: "Beach Café", mats: ["Hand Drill", "Tar Bucket", "Hammer"] },
+      { name: "Town Hall", mats: ["Stone Block", "Hammer", "Paint Bucket"] },
+      { name: "Train Station", mats: ["Tar Bucket", "Brick", "Hand Drill"] }
+    ];
+
+    const sharedMaterials = ["Nails", "Screws", "Wood Panels", "Bolts", "Planks", "Duct Tape"];
+    const exclusiveTownMaterials = ["Brick", "Hammer", "Hand Drill", "Paint Bucket", "Stone Block", "Tar Bucket"];
+    const expansionMaterials = ["Land Deed", "Mallet", "Marker Stake"];
+    const trainMaterials = ["Refined Coal", "Iron Bar", "Silver Bar", "Gold Bar", "Platinum Bar"];
+
+    // ---- Personal Train Requirements Lookup ----
+    const trainRequirementsTable = {
+      2: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":5, "Gold Bar":0, "Platinum Bar":0 },
+      3: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":0, "Gold Bar":5, "Platinum Bar":0 },
+      4: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":5 },
+      5: { "Refined Coal":10, "Iron Bar":10, "Silver Bar":10, "Gold Bar":0, "Platinum Bar":0 },
+      6: { "Refined Coal":10, "Iron Bar":10, "Silver Bar":0, "Gold Bar":10, "Platinum Bar":0 },
+      7: { "Refined Coal":10, "Iron Bar":10, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":10 },
+      8: { "Refined Coal":15, "Iron Bar":15, "Silver Bar":15, "Gold Bar":0, "Platinum Bar":0 },
+      9: { "Refined Coal":15, "Iron Bar":15, "Silver Bar":0, "Gold Bar":15, "Platinum Bar":0 },
+      10: { "Refined Coal":15, "Iron Bar":15, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":15 },
+      11: { "Refined Coal":20, "Iron Bar":20, "Silver Bar":20, "Gold Bar":0, "Platinum Bar":0 },
+      12: { "Refined Coal":20, "Iron Bar":20, "Silver Bar":0, "Gold Bar":20, "Platinum Bar":0 },
+      13: { "Refined Coal":20, "Iron Bar":20, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":20 },
+      14: { "Refined Coal":25, "Iron Bar":25, "Silver Bar":25, "Gold Bar":0, "Platinum Bar":0 },
+      15: { "Refined Coal":25, "Iron Bar":25, "Silver Bar":0, "Gold Bar":25, "Platinum Bar":0 },
+      16: { "Refined Coal":25, "Iron Bar":25, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":25 },
+      17: { "Refined Coal":30, "Iron Bar":30, "Silver Bar":30, "Gold Bar":0, "Platinum Bar":0 },
+      18: { "Refined Coal":30, "Iron Bar":30, "Silver Bar":0, "Gold Bar":30, "Platinum Bar":0 },
+      19: { "Refined Coal":30, "Iron Bar":30, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":30 }
+    };
+    function getTrainRequirements(level) {
+      if (level <= 1) return { "Refined Coal":0, "Iron Bar":0, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":0 };
+      if (level <= 19) return trainRequirementsTable[level];
+      const group = Math.floor((level - 2) / 3);
+      const base = 5 + group * 5;
+      const offset = (level - 2) % 3;
+      if (offset === 0) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":base, "Gold Bar":0, "Platinum Bar":0 };
+      else if (offset === 1) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":base, "Platinum Bar":0 };
+      else return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":base };
+    }
+
+    const defaultAccounts = [
+      { id: 1, name: "Farm A", siloLevel: 48, barnLevel: 60, expansionLevel: 20,
+        currents: { "Nails":20, "Screws":0, "Wood Panels":0, "Bolts":0, "Planks":0, "Duct Tape":0, "Land Deed":0, "Mallet":0, "Marker Stake":0 },
+        townLevels: { "Grocery Store": 17, "Cinema": 5, "Diner": 12, "Bed and Breakfast": 8, "Spa": 20, "Gift Shop": 3, "Beach Café": 6, "Town Hall": 10, "Train Station": 4 },
+        townCurrents: { "Brick":0, "Hammer":0, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 10,
+        trainCurrents: { "Refined Coal": 0, "Iron Bar": 0, "Silver Bar": 0, "Gold Bar": 0, "Platinum Bar": 0 }
+      },
+      { id: 2, name: "Farm B", siloLevel: 50, barnLevel: 55, expansionLevel: 18,
+        currents: { "Nails":10, "Screws":5, "Wood Panels":3, "Bolts":2, "Planks":1, "Duct Tape":4, "Land Deed":2, "Mallet":1, "Marker Stake":0 },
+        townLevels: { "Grocery Store":10, "Cinema":4, "Diner":8, "Bed and Breakfast":6, "Spa":12, "Gift Shop":2, "Beach Café":4, "Town Hall":7, "Train Station":3 },
+        townCurrents: { "Brick":1, "Hammer":2, "Hand Drill":0, "Paint Bucket":1, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 15,
+        trainCurrents: { "Refined Coal":5, "Iron Bar":5, "Silver Bar":2, "Gold Bar":0, "Platinum Bar":0 }
+      },
+      { id: 3, name: "Farm C", siloLevel: 30, barnLevel: 40, expansionLevel: 12,
+        currents: { "Nails":30, "Screws":8, "Wood Panels":12, "Bolts":6, "Planks":10, "Duct Tape":5, "Land Deed":3, "Mallet":4, "Marker Stake":2 },
+        townLevels: { "Grocery Store":5, "Cinema":3, "Diner":4, "Bed and Breakfast":3, "Spa":7, "Gift Shop":1, "Beach Café":2, "Town Hall":4, "Train Station":2 },
+        townCurrents: { "Brick":0, "Hammer":1, "Hand Drill":0, "Paint Bucket":0, "Stone Block":0, "Tar Bucket":0 },
+        trainLevel: 7,
+        trainCurrents: { "Refined Coal":2, "Iron Bar":3, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":1 }
+      }
+    ];
+
+    // ---------- Sync Status UI ----------
+    function updateSyncBadge() {
+      const el = document.getElementById('syncBadge');
+      if (!el) return;
+      if (GIST_ID && GITHUB_TOKEN && lastSyncTime) {
+        try {
+          const d = new Date(lastSyncTime);
+          const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          el.innerHTML = `<span class="sync-dot bg-green-500 inline-block mr-1"></span> Synced at ${timeStr}`;
+          el.className = 'text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full';
+        } catch(e) {
+          el.innerHTML = `<span class="sync-dot bg-green-500 inline-block mr-1"></span> Synced`;
+          el.className = 'text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full';
+        }
+      } else if (GIST_ID && GITHUB_TOKEN) {
+        el.innerHTML = '<span class="sync-dot bg-yellow-500 inline-block mr-1"></span> Gist configured — pull to sync';
+        el.className = 'text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full';
+      } else {
+        el.innerHTML = '<span class="sync-dot bg-gray-400 inline-block mr-1"></span> Local storage only';
+        el.className = 'text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full';
+      }
+    }
+
+    // ---------- Load from localStorage ----------
+    function loadFromLocalStorage() {
+      const saved = localStorage.getItem('haydayGlobalPoolV5');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.accounts && parsed.accounts.length > 0) {
+            accounts = parsed.accounts;
+            return true;
+          }
+        } catch (e) { /* ignore */ }
+      }
+      return false;
+    }
+
+    // ---------- GitHub Gist API ----------
+    async function loadFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) return false;
+      try {
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
+          cache: 'no-cache'
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const gist = await response.json();
+        if (!gist.files || !gist.files[GIST_FILENAME]) throw new Error('File not found in gist');
+        const content = gist.files[GIST_FILENAME].content;
+        const data = JSON.parse(content);
+        if (data.accounts && data.accounts.length > 0) {
+          accounts = data.accounts;
+          // Grab timestamp from Gist metadata or embedded lastSync
+          if (data.lastSync) {
+            lastSyncTime = data.lastSync;
+          } else if (gist.updated_at) {
+            lastSyncTime = gist.updated_at;
+          }
+          localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+          dataSource = 'gist';
+          return true;
+        }
+
+        return true; // Gist exists but empty
+      } catch (err) {
+        console.error('loadFromGist error:', err);
+        return false;
+      }
+    }
+
+    // ---------- Ensure accounts are valid ----------
+    function ensureAccountsValid() {
+      accounts.forEach(acc => {
+        if (!acc.townLevels) acc.townLevels = {};
+        townBuildings.forEach(b => { if (acc.townLevels[b.name] === undefined) acc.townLevels[b.name] = 1; });
+        if (!acc.townCurrents) acc.townCurrents = {};
+        exclusiveTownMaterials.forEach(m => { if (acc.townCurrents[m] === undefined) acc.townCurrents[m] = 0; });
+        if (!acc.currents) acc.currents = {};
+        trackedItems.forEach(item => { if (acc.currents[item.name] === undefined) acc.currents[item.name] = 0; });
+        expansionMaterials.forEach(m => { if (acc.currents[m] === undefined) acc.currents[m] = 0; });
+        if (acc.trainLevel === undefined) acc.trainLevel = 1;
+        if (!acc.trainCurrents) acc.trainCurrents = {};
+        trainMaterials.forEach(m => { if (acc.trainCurrents[m] === undefined) acc.trainCurrents[m] = 0; });
+      });
+    }
+
+    // ---------- Compute global totals ----------
+    function computeGlobalTotals() {
+      const totals = {};
+      trackedItems.forEach(item => {
+        let sum = 0;
+        accounts.forEach(acc => sum += (acc.currents[item.name] || 0));
+        totals[item.name] = sum;
+      });
+      return totals;
+    }
+
+    // ---------- Ready to Upgrade helpers ----------
+    function getRequiredMaterials(farm, upgradeType) {
+      if (upgradeType === 'silo') {
+        return [
+          { name: "Nails", qty: farm.siloLevel },
+          { name: "Screws", qty: farm.siloLevel },
+          { name: "Wood Panels", qty: farm.siloLevel }
+        ];
+      }
+      if (upgradeType === 'barn') {
+        return [
+          { name: "Bolts", qty: farm.barnLevel },
+          { name: "Planks", qty: farm.barnLevel },
+          { name: "Duct Tape", qty: farm.barnLevel }
+        ];
+      }
+      if (upgradeType === 'expansion') {
+        return [
+          { name: "Land Deed", qty: farm.expansionLevel },
+          { name: "Mallet", qty: farm.expansionLevel },
+          { name: "Marker Stake", qty: farm.expansionLevel }
+        ];
+      }
+      if (upgradeType === 'train') {
+        const trainReq = getTrainRequirements(farm.trainLevel || 1);
+        const mats = [];
+        trainMaterials.forEach(bar => {
+          if (trainReq[bar] > 0) mats.push({ name: bar, qty: trainReq[bar] });
+        });
+        return mats;
+      }
+      return [];
+    }
+
+    function getCurrentForMaterial(material) {
+      let total = 0;
+      accounts.forEach(acc => {
+        if (sharedMaterials.includes(material) || expansionMaterials.includes(material)) {
+          total += (acc.currents[material] || 0);
+        } else if (exclusiveTownMaterials.includes(material)) {
+          total += (acc.townCurrents[material] || 0);
+        } else if (trainMaterials.includes(material)) {
+          total += (acc.trainCurrents[material] || 0);
+        }
+      });
+      return total;
+    }
+
+    // Returns the surplus this farm has for a material (own current - its requirement)
+    // Only > 0 means this farm actually has extra to give away.
+    function getIndividualSurplus(farm, material) {
+      let current, level;
+      if (sharedMaterials.includes(material)) {
+        current = farm.currents[material] || 0;
+        // Determine category from trackedItems
+        const item = trackedItems.find(i => i.name === material);
+        if (item.category === 'silo') level = farm.siloLevel;
+        else if (item.category === 'barn') level = farm.barnLevel;
+        else level = farm.expansionLevel;
+      } else if (expansionMaterials.includes(material)) {
+        current = farm.currents[material] || 0;
+        level = farm.expansionLevel;
+      } else if (trainMaterials.includes(material)) {
+        current = farm.trainCurrents[material] || 0;
+        const req = getTrainRequirements(farm.trainLevel || 1);
+        level = req[material] || 0;
+      } else {
+        // Town material (not used in this version, but for completeness)
+        current = farm.townCurrents[material] || 0;
+        return Math.max(0, current); // town buildings not yet in upgrade tracking, treat surplus as raw current
+      }
+      return Math.max(0, current - level);
+    }
+
+    // Collect all source farms that have individual surplus for a material (excluding target farm)
+    function getSurplusSources(material, excludeFarmId) {
+      const sources = [];
+      accounts.forEach(acc => {
+        if (acc.id === excludeFarmId) return;
+        const surplus = getIndividualSurplus(acc, material);
+        if (surplus > 0) sources.push({ farm: acc, surplus });
+      });
+      // Sort by surplus descending so we use the biggest sources first
+      sources.sort((a, b) => b.surplus - a.surplus);
+      return sources;
+    }
+
+    function computeReadyUpgrades() {
+      const upgradeTypes = ['silo', 'barn', 'expansion', 'train'];
+      const readyList = [];
+
+      accounts.forEach(farm => {
+        upgradeTypes.forEach(type => {
+          const mats = getRequiredMaterials(farm, type);
+          if (mats.length === 0) return;
+
+          let allReady = true;
+          mats.forEach(mat => {
+            const totalCurrent = getCurrentForMaterial(mat.name);
+            if (mat.qty - totalCurrent > 0) allReady = false;
+          });
+
+          if (allReady) readyList.push({ farm: farm.name, type });
+        });
+      });
+
+      return readyList;
+    }
+
+    function computeTransferSuggestions() {
+      const upgradeTypes = ['silo', 'barn', 'expansion', 'train'];
+      const allDeficits = [];
+
+      accounts.forEach(farm => {
+        upgradeTypes.forEach(type => {
+          const mats = getRequiredMaterials(farm, type);
+          if (mats.length === 0) return;
+
+          mats.forEach(mat => {
+            const totalCurrent = getCurrentForMaterial(mat.name);
+            const deficit = mat.qty - totalCurrent;
+            if (deficit <= 0) return; // this material is satisfied
+
+            // Collect surplus sources
+            const sources = getSurplusSources(mat.name, farm.id);
+            if (sources.length === 0) return; // no surplus anywhere, handled by deficits awaiting
+
+            // Aggregate: take from sources in order of largest surplus
+            let remaining = deficit;
+            const usedSources = [];
+            sources.forEach(source => {
+              if (remaining <= 0) return;
+              const take = Math.min(source.surplus, remaining);
+              usedSources.push({ farm: source.farm.name, amount: take });
+              remaining -= take;
+            });
+
+            const stillNeeded = remaining; // what couldn't be covered
+
+            allDeficits.push({
+              material: mat.name,
+              sources: usedSources,
+              totalTransferred: deficit - stillNeeded,
+              toFarm: farm.name,
+              upgradeType: type,
+              stillNeeded: stillNeeded,
+              deficit: deficit,
+              required: mat.qty,
+              totalCurrent
+            });
+          });
+        });
+      });
+
+      // Sort: smallest stillNeeded first (nearly-complete upgrades prioritised),
+      // then largest totalTransferred (most impactful)
+      allDeficits.sort((a, b) => {
+        if (a.stillNeeded !== b.stillNeeded) return a.stillNeeded - b.stillNeeded;
+        return b.totalTransferred - a.totalTransferred;
+      });
+
+      // Deduplicate by material→toFarm→upgradeType
+      const seen = new Set();
+      const unique = [];
+      allDeficits.forEach(s => {
+        const key = `${s.material}|${s.toFarm}|${s.upgradeType}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(s);
+        }
+      });
+
+      return unique.slice(0, 5);
+    }
+
+    function computeDeficitsAwaiting() {
+      const upgradeTypes = ['silo', 'barn', 'expansion', 'train'];
+      const awaiting = [];
+
+      accounts.forEach(farm => {
+        upgradeTypes.forEach(type => {
+          const mats = getRequiredMaterials(farm, type);
+          if (mats.length === 0) return;
+
+          mats.forEach(mat => {
+            const totalCurrent = getCurrentForMaterial(mat.name);
+            const deficit = mat.qty - totalCurrent;
+            if (deficit <= 0) return;
+
+            // Check if ANY farm (excluding self) has individual surplus
+            const sources = getSurplusSources(mat.name, farm.id);
+            if (sources.length > 0) return; // handled by transfer suggestions
+
+            awaiting.push({
+              material: mat.name,
+              deficit,
+              farm: farm.name,
+              upgradeType: type
+            });
+          });
+        });
+      });
+
+      // Sort by deficit ascending (smallest first)
+      awaiting.sort((a, b) => a.deficit - b.deficit);
+
+      // Deduplicate
+      const seen = new Set();
+      const unique = [];
+      awaiting.forEach(s => {
+        const key = `${s.material}|${s.farm}|${s.upgradeType}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(s);
+        }
+      });
+
+      return unique;
+    }
+
+    function renderReadyUpgrades() {
+      const readyList = computeReadyUpgrades();
+      const container = document.getElementById('readyUpgradesContainer');
+      container.innerHTML = '';
+      if (readyList.length === 0) {
+        container.innerHTML = '<div class="col-span-full text-sm text-gray-400">No upgrades are ready yet. Collect more materials or move items between farms.</div>';
+      } else {
+        // Group ready upgrades by farm name
+        const grouped = {};
+        readyList.forEach(item => {
+          if (!grouped[item.farm]) grouped[item.farm] = [];
+          grouped[item.farm].push(item.type);
+        });
+        // Render each farm once with a bullet list
+        Object.entries(grouped).forEach(([farmName, types]) => {
+          const card = document.createElement('div');
+          card.className = 'bg-green-50 border border-green-200 rounded-2xl p-3';
+          let listHtml = types.map(t => `<li class="text-xs text-green-600 capitalize">${t} upgrade ready!</li>`).join('');
+          card.innerHTML = `
+            <div class="font-bold text-green-800 text-sm">${farmName}</div>
+            <ul class="list-disc pl-5 mt-1">${listHtml}</ul>
+          `;
+          container.appendChild(card);
+        });
+      }
+    }
+
+    function renderTransferSuggestions() {
+      const suggestions = computeTransferSuggestions();
+      const list = document.getElementById('transferList');
+      list.innerHTML = '';
+      if (suggestions.length === 0) {
+        list.innerHTML = '<li class="text-gray-400">All upgrades are either ready or all deficits have no surplus — see the section below.</li>';
+        return;
+      }
+      suggestions.forEach(s => {
+        const li = document.createElement('li');
+        // Build source parts: "X from Farm A and Y from Farm B"
+        const sourceParts = s.sources.map(src => `<strong>${src.amount}</strong> <strong>${s.material}</strong> from <strong>${src.farm}</strong>`);
+        const sourcesText = sourceParts.join(' and ');
+        const suffix = s.stillNeeded > 0
+          ? `(still needs ${s.stillNeeded} more)`
+          : '(fully covered)';
+        li.innerHTML = `Move ${sourcesText} to <strong>${s.toFarm}</strong> to upgrade <strong>${s.toFarm}</strong>'s <span class="capitalize">${s.upgradeType}</span> ${suffix}`;
+        list.appendChild(li);
+      });
+    }
+
+    function renderDeficitsAwaiting() {
+      const awaiting = computeDeficitsAwaiting();
+      const list = document.getElementById('awaitingList');
+      list.innerHTML = '';
+      if (awaiting.length === 0) {
+        list.innerHTML = '<li class="text-gray-400">All material deficits can be covered by existing surplus on other farms.</li>';
+        return;
+      }
+      awaiting.forEach(s => {
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${s.farm}</strong> needs <strong>${s.deficit}</strong> of <strong>${s.material}</strong> for <span class="capitalize">${s.upgradeType}</span> upgrade — no other farm has surplus. Collect more.`;
+        list.appendChild(li);
+      });
+    }
+
+    // ---------- Render Dashboard ----------
+    function renderDashboard() {
+      if (accounts.length === 0) {
+        document.getElementById('cardsContainer').innerHTML = '<div class="col-span-full text-center text-gray-400 py-12">No farm data loaded. Add farms from the main tracker first.</div>';
+        document.getElementById('heatmapBody').innerHTML = '';
+        document.getElementById('heatmapHead').innerHTML = '';
+        updateSyncBadge();
+        return;
+      }
+
+      ensureAccountsValid();
+      renderFarmCards();
+      renderHeatmap();
+      renderReadyUpgrades();
+      renderTransferSuggestions();
+      renderDeficitsAwaiting();
+      updateSyncBadge();
+      updateLastSyncDisplay();
+
+    }
+
+    // --- Farm Cards ---
+    function renderFarmCards() {
+      const container = document.getElementById('cardsContainer');
+      container.innerHTML = '';
+      const globalTotals = computeGlobalTotals();
+
+      accounts.forEach(acc => {
+        // Compute readiness percentage across silo/barn/expansion items
+        let totalRatio = 0;
+        let count = 0;
+        trackedItems.forEach(item => {
+          let farmLevel = 0;
+          if (item.category === 'silo') farmLevel = acc.siloLevel;
+          else if (item.category === 'barn') farmLevel = acc.barnLevel;
+          else farmLevel = acc.expansionLevel;
+          if (farmLevel > 0) {
+            const current = acc.currents[item.name] || 0;
+            const ratio = Math.min(current / farmLevel, 1);
+            totalRatio += ratio;
+            count++;
+          }
+        });
+        const readiness = count > 0 ? Math.round((totalRatio / count) * 100) : 0;
+
+        // Colour based on readiness
+        let barColor = 'bg-red-500';
+        if (readiness >= 80) barColor = 'bg-green-500';
+        else if (readiness >= 50) barColor = 'bg-yellow-500';
+        else if (readiness >= 25) barColor = 'bg-orange-500';
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-3xl p-5 card-shadow';
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-bold text-gray-800">${acc.name}</h3>
+            <span class="text-2xl font-bold ${readiness >= 80 ? 'text-green-600' : readiness >= 50 ? 'text-yellow-600' : 'text-red-600'}">${readiness}%</span>
+          </div>
+          <div class="progress-bar mb-4">
+            <div class="progress-fill ${barColor}" style="width:${readiness}%"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="bg-green-50 rounded-xl p-2 text-center">
+              <div class="text-xs text-gray-500">Silo</div>
+              <div class="font-semibold text-gray-800">${acc.siloLevel}</div>
+            </div>
+            <div class="bg-blue-50 rounded-xl p-2 text-center">
+              <div class="text-xs text-gray-500">Barn</div>
+              <div class="font-semibold text-gray-800">${acc.barnLevel}</div>
+            </div>
+            <div class="bg-purple-50 rounded-xl p-2 text-center">
+              <div class="text-xs text-gray-500">Expansion</div>
+              <div class="font-semibold text-gray-800">${acc.expansionLevel}</div>
+            </div>
+            <div class="bg-amber-50 rounded-xl p-2 text-center">
+              <div class="text-xs text-gray-500">Train</div>
+              <div class="font-semibold text-gray-800">${acc.trainLevel || 1}</div>
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // --- Heatmap ---
+    function renderHeatmap() {
+      const thead = document.getElementById('heatmapHead');
+      const tbody = document.getElementById('heatmapBody');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      const globalTotals = computeGlobalTotals();
+
+      // Header row
+      let headerHTML = `<tr><th class="text-left py-2 pr-4 text-gray-600 font-semibold">Material</th>`;
+      accounts.forEach(acc => {
+        headerHTML += `<th class="heatmap-cell text-gray-700 font-semibold border-b border-gray-200">${acc.name}</th>`;
+      });
+      headerHTML += `<th class="heatmap-cell text-gray-700 font-semibold border-b border-gray-200 bg-gray-50">Global Total</th>`;
+      headerHTML += `</tr>`;
+      thead.innerHTML = headerHTML;
+
+      // Data rows
+      trackedItems.forEach(item => {
+        let row = `<tr class="border-b border-gray-100 hover:bg-gray-50">`;
+        row += `<td class="py-2 pr-4 font-medium text-sm"><i class="${item.icon} mr-2 text-gray-500"></i>${item.name}</td>`;
+
+        accounts.forEach(acc => {
+          let farmLevel = 0;
+          if (item.category === 'silo') farmLevel = acc.siloLevel;
+          else if (item.category === 'barn') farmLevel = acc.barnLevel;
+          else farmLevel = acc.expansionLevel;
+          const current = acc.currents[item.name] || 0;
+          const needed = globalTotals[item.name] - farmLevel;
+
+          let bgClass = 'bg-gray-100 text-gray-500';
+          let sign = '';
+          if (needed > 0) { bgClass = 'bg-green-100 text-green-700'; sign = '+'; }
+          else if (needed < 0) { bgClass = 'bg-red-100 text-red-700'; }
+
+          row += `<td class="heatmap-cell relative tooltip-trigger">
+            <span class="inline-block px-3 py-1 rounded-lg ${bgClass}">${sign}${needed}</span>
+            <div class="tooltip-box">Current: ${current} | Required: ${farmLevel}</div>
+          </td>`;
+        });
+
+        // Global total column
+        const globalTotal = globalTotals[item.name];
+        row += `<td class="heatmap-cell bg-gray-50 font-bold text-gray-800">${globalTotal}</td>`;
+
+        row += `</tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+
+    // ---------- Load Data ----------
+    async function loadData() {
+      const hadLocal = loadFromLocalStorage();
+      let gistLoaded = false;
+
+      if (GIST_ID && GITHUB_TOKEN) {
+        gistLoaded = await loadFromGist();
+        dataSource = gistLoaded ? 'gist' : 'localStorage';
+      } else {
+        dataSource = 'localStorage';
+      }
+
+      if (!hadLocal && !gistLoaded) {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+      }
+
+      ensureAccountsValid();
+      renderDashboard();
+    }
+
+    // ---------- Format Sync Time ----------
+    function formatSyncTime(isoString) {
+      if (!isoString) return 'never';
+      try {
+        const now = new Date();
+        const date = new Date(isoString);
+        const diffMin = Math.floor((now - date) / 60000);
+        if (diffMin < 1) return 'just now';
+        if (diffMin < 60) return `${diffMin} minutes ago`;
+        return date.toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
+      } catch(e) {
+        return 'unknown';
+      }
+    }
+
+    function updateLastSyncDisplay() {
+      const el = document.getElementById('lastSyncDisplay');
+      if (!el) return;
+      if (lastSyncTime) {
+        el.textContent = `🕒 Last sync: ${formatSyncTime(lastSyncTime)}`;
+      } else {
+        el.textContent = '';
+      }
+    }
+
+    // ---------- Save to Gist ----------
+    async function saveToGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) return false;
+      try {
+        const payload = {
+          files: {
+            [GIST_FILENAME]: {
+              content: JSON.stringify({ accounts, lastSync: new Date().toISOString() }, null, 2)
+            }
+          }
+        };
+        const url = `https://api.github.com/gists/${GIST_ID}`;
+        const response = await fetch(url, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        lastSyncTime = new Date().toISOString();
+        localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+        updateSyncBadge();
+        updateLastSyncDisplay();
+        return true;
+      } catch (err) {
+        console.error('saveToGist error:', err);
+        return false;
+      }
+    }
+
+    // ---------- Pull from Gist ----------
+    async function pullFromGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Gist ID and Token in the Desktop tracker Sync Settings first.');
+        return;
+      }
+      const ok = await loadFromGist();
+      if (ok) {
+        ensureAccountsValid();
+        renderDashboard();
+        updateLastSyncDisplay();
+        showToast('Data reloaded from Gist');
+      } else {
+        alert('Failed to load from Gist. Check credentials.');
+      }
+    }
+
+    // ---------- Push to Gist ----------
+    async function pushToGist() {
+      if (!GIST_ID || !GITHUB_TOKEN) {
+        alert('Please configure Gist ID and Token in the Desktop tracker Sync Settings first.');
+        return;
+      }
+      const ok = await saveToGist();
+      if (ok) {
+        showToast('Data pushed to Gist');
+      } else {
+        alert('Failed to push to Gist. Check credentials.');
+      }
+    }
+
+    // ---------- Simple Toast ----------
+    function showToast(msg) {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.style.cssText = 'position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#166534; color:white; padding:10px 24px; border-radius:40px; font-size:14px; font-weight:600; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,0.2); transition:opacity 0.3s;';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.style.opacity = '1';
+      setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+    }
+
+    // ---------- Manual Refresh ----------
+    async function handleRefresh() {
+      const btn = document.getElementById('refreshBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Refreshing...';
+      await loadData();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Refresh';
+    }
+
+    // ---------- Init ----------
+    document.addEventListener('DOMContentLoaded', () => {
+      loadData();
+      document.getElementById('refreshBtn').addEventListener('click', handleRefresh);
+      document.getElementById('pullFromGistBtn').addEventListener('click', pullFromGist);
+      document.getElementById('pushToGistBtn').addEventListener('click', pushToGist);
+    });
+
+  </script>
+</body>
+</html>
