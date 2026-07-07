@@ -76,25 +76,27 @@
 
     .planner-card-top {
       display: grid;
-      grid-template-columns: 88px minmax(0, 1fr) auto;
+      grid-template-columns: 124px minmax(0, 1fr) auto;
       gap: 1rem;
       align-items: start;
     }
 
     .planner-product-image {
-      width: 88px;
-      height: 88px;
+      width: 124px;
+      height: 124px;
       overflow: hidden;
-      border-radius: 1.1rem;
-      border: 1px solid #e2e8f0;
-      background: #f8fafc;
+      border-radius: 1.35rem;
+      border: 1px solid #dbe4ee;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
       flex-shrink: 0;
     }
 
     .planner-product-image img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
+      padding: 10px;
       display: block;
     }
 
@@ -116,15 +118,15 @@
     }
 
     .planner-visual--building {
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
+      width: 34px;
+      height: 34px;
+      border-radius: 11px;
       background: #f8fafc;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #dbe4ee;
     }
 
     .planner-visual--building img {
-      padding: 2px;
+      padding: 3px;
     }
 
     .planner-chip {
@@ -132,26 +134,27 @@
       align-items: center;
       gap: 0.4rem;
       border-radius: 999px;
-      padding: 0.35rem 0.6rem;
+      padding: 0.42rem 0.72rem;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
       color: #0f172a;
-      font-size: 0.78rem;
+      font-size: 0.82rem;
       font-weight: 700;
       line-height: 1;
     }
 
     .planner-chip img {
-      width: 18px;
-      height: 18px;
+      width: 22px;
+      height: 22px;
       object-fit: contain;
       flex-shrink: 0;
     }
 
     .planner-chip--accent {
-      background: #ecfdf5;
-      border-color: #a7f3d0;
-      color: #065f46;
+      background: #dcfce7;
+      border-color: #86efac;
+      color: #14532d;
+      box-shadow: 0 8px 20px rgba(34, 197, 94, 0.12);
     }
 
     .planner-chip--muted {
@@ -164,31 +167,45 @@
       flex-wrap: wrap;
       gap: 0.4rem;
       align-items: center;
+      justify-content: flex-end;
     }
 
     .planner-meta-chip {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      padding: 0.38rem 0.6rem;
+      padding: 0.42rem 0.7rem;
       border-radius: 999px;
       background: #f8fafc;
       border: 1px solid #e2e8f0;
       color: #0f172a;
-      font-size: 0.82rem;
+      font-size: 0.84rem;
       font-weight: 700;
       line-height: 1;
     }
 
-    .planner-meta-chip i {
-      color: #64748b;
+    .planner-meta-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .planner-meta-icon img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: contain;
     }
 
     .planner-time-row {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      font-size: 0.82rem;
+      justify-content: flex-end;
+      font-size: 0.84rem;
       font-weight: 700;
       color: #475569;
       line-height: 1;
@@ -209,9 +226,44 @@
       gap: 0.45rem;
     }
 
+    .planner-selected-line .planner-chip {
+      padding: 0.48rem 0.82rem;
+      font-size: 0.84rem;
+    }
+
+    .planner-selected-line .planner-chip img {
+      width: 26px;
+      height: 26px;
+    }
+
+    .planner-needs-row .planner-chip {
+      padding: 0.45rem 0.78rem;
+    }
+
+    .planner-needs-row .planner-chip img {
+      width: 24px;
+      height: 24px;
+    }
+
     .planner-card-body {
       display: grid;
       gap: 0.85rem;
+    }
+
+    .planner-card-main {
+      min-width: 0;
+      display: grid;
+      gap: 0.55rem;
+    }
+
+    .planner-card-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-self: end;
+      gap: 0.45rem;
+      min-width: 132px;
+      text-align: right;
     }
 
     @media (max-width: 640px) {
@@ -221,6 +273,18 @@
 
       .planner-product-image {
         margin-inline: auto;
+      }
+
+      .planner-card-meta {
+        align-items: flex-start;
+        justify-self: stretch;
+        text-align: left;
+        min-width: 0;
+      }
+
+      .planner-meta-row,
+      .planner-time-row {
+        justify-content: flex-start;
       }
     }
   </style>
@@ -544,6 +608,64 @@
         return item ? resolveImage(item) : '';
       }
 
+      function makeMetricIcon(kind) {
+        var svg = '';
+
+        if (kind === 'coins') {
+          svg = [
+            '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">',
+            '<defs>',
+            '<linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">',
+            '<stop offset="0%" stop-color="#fde68a"/>',
+            '<stop offset="100%" stop-color="#f59e0b"/>',
+            '</linearGradient>',
+            '</defs>',
+            '<circle cx="32" cy="32" r="24" fill="url(#g)" stroke="#d97706" stroke-width="3"/>',
+            '<circle cx="32" cy="32" r="16" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="4"/>',
+            '<path d="M24 22c3-4 13-4 16 0" fill="none" stroke="rgba(255,255,255,0.9)" stroke-linecap="round" stroke-width="4"/>',
+            '<path d="M31 20l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#fff7ed" opacity="0.95"/>',
+            '</svg>'
+          ].join('');
+        } else if (kind === 'xp') {
+          svg = [
+            '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">',
+            '<defs>',
+            '<linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">',
+            '<stop offset="0%" stop-color="#93c5fd"/>',
+            '<stop offset="100%" stop-color="#2563eb"/>',
+            '</linearGradient>',
+            '</defs>',
+            '<circle cx="32" cy="32" r="24" fill="url(#g)" stroke="#1d4ed8" stroke-width="3"/>',
+            '<path d="M32 15l4.8 10 11 1.4-8.1 7.4 2.4 10.7L32 39l-10.1 5.5 2.4-10.7-8.1-7.4 11-1.4z" fill="#eff6ff" stroke="rgba(255,255,255,0.9)" stroke-width="1.4" stroke-linejoin="round"/>',
+            '<circle cx="44" cy="19" r="3.5" fill="#fff" opacity="0.75"/>',
+            '</svg>'
+          ].join('');
+        } else {
+          svg = [
+            '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">',
+            '<defs>',
+            '<linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">',
+            '<stop offset="0%" stop-color="#c4b5fd"/>',
+            '<stop offset="100%" stop-color="#0f766e"/>',
+            '</linearGradient>',
+            '</defs>',
+            '<circle cx="32" cy="32" r="24" fill="url(#g)" stroke="#0f766e" stroke-width="3"/>',
+            '<circle cx="32" cy="32" r="15" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="4"/>',
+            '<path d="M32 20v13l9 5" fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="4.5"/>',
+            '<circle cx="32" cy="32" r="3.3" fill="#fff"/>',
+            '</svg>'
+          ].join('');
+        }
+
+        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+      }
+
+      var plannerMetricIcons = {
+        coins: makeMetricIcon('coins'),
+        xp: makeMetricIcon('xp'),
+        time: makeMetricIcon('time')
+      };
+
       function getBuildingImageByName(name) {
         var normalized = normalize(name);
         return buildingImageOverrides[normalized] || buildingImageOverrides[normalized.replace(/_/g, '')] || '';
@@ -595,9 +717,9 @@
       function renderCompactMetaRow(entry) {
         var timeValue = entry.masteredTimeMin != null ? entry.masteredTimeMin : entry.productionTimeMin;
         var timeLabel = formatMinutes(timeValue);
-        var priceChip = '<span class="planner-meta-chip"><i class="fas fa-coins"></i><span>' + formatCoins(entry.maxPrice) + '</span></span>';
-        var xpChip = entry.xp != null ? '<span class="planner-meta-chip"><i class="fas fa-star"></i><span>' + formatCoins(entry.xp) + ' XP</span></span>' : '';
-        var timeChip = '<div class="planner-time-row"><i class="fas fa-clock"></i><span>' + escapeHtml(timeLabel) + '</span></div>';
+        var priceChip = '<span class="planner-meta-chip"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.coins) + '" alt=""></span><span>' + formatCoins(entry.maxPrice) + '</span></span>';
+        var xpChip = entry.xp != null ? '<span class="planner-meta-chip"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.xp) + '" alt=""></span><span>' + formatCoins(entry.xp) + ' XP</span></span>' : '';
+        var timeChip = '<div class="planner-time-row"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.time) + '" alt=""></span><span>' + escapeHtml(timeLabel) + '</span></div>';
         return '<div class="planner-meta-row">' + priceChip + xpChip + '</div>' + timeChip;
       }
 
@@ -930,28 +1052,28 @@
           card.innerHTML =
             '<div class="planner-card-top">' +
               '<div class="planner-product-image">' +
-                '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-cover">' +
+                '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-contain">' +
               '</div>' +
-              '<div class="min-w-0">' +
-                '<div class="flex flex-col gap-2">' +
-                  '<div class="min-w-0">' +
-                    '<h3 class="truncate text-lg font-black text-slate-900">' + escapeHtml(entry.productName) + '</h3>' +
-                    '<div class="planner-building-line mt-1">' + renderCompactBuildingVisual(entry.source || (entry.item && entry.item.source) || '') + '</div>' +
-                    '<div class="planner-selected-line mt-2">' + renderSelectedIngredientChip(selectedName, entry.selectedQtyUsed) + '</div>' +
+              '<div class="planner-card-main">' +
+                '<div class="min-w-0">' +
+                  '<h3 class="truncate text-lg font-black text-slate-900">' + escapeHtml(entry.productName) + '</h3>' +
+                  '<div class="planner-building-line mt-1">' + renderCompactBuildingVisual(entry.source || (entry.item && entry.item.source) || '') + '</div>' +
+                  '<div class="planner-selected-line mt-2">' + renderSelectedIngredientChip(selectedName, entry.selectedQtyUsed) + '</div>' +
+                '</div>' +
+                '<div class="planner-card-body">' +
+                  '<div>' +
+                    '<div class="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Needs:</div>' +
+                    '<div class="planner-needs-row">' + needsChips + '</div>' +
                   '</div>' +
-                  '<div class="planner-card-body">' +
-                    renderCompactMetaRow(entry) +
-                    '<div>' +
-                      '<div class="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Needs:</div>' +
-                      '<div class="planner-needs-row">' + needsChips + '</div>' +
+                  '<div class="mt-2 flex items-center justify-end">' +
+                    '<div class="flex items-center gap-2 text-xs text-slate-500">' +
+                      (sourceLink ? sourceLink : '<span class="text-slate-400">Source unavailable</span>') +
                     '</div>' +
                   '</div>' +
                 '</div>' +
-                '<div class="mt-2 flex items-center justify-end">' +
-                  '<div class="flex items-center gap-2 text-xs text-slate-500">' +
-                    (sourceLink ? sourceLink : '<span class="text-slate-400">Source unavailable</span>') +
-                  '</div>' +
-                '</div>' +
+              '</div>' +
+              '<div class="planner-card-meta">' +
+                renderCompactMetaRow(entry) +
               '</div>' +
             '</div>';
 
