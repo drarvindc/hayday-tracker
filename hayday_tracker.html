@@ -376,6 +376,19 @@
       'stoneblock': 'images/items/stone_block.png',
       'tarbucket': 'images/items/tar_bucket.png'
     };
+    const HAYDAY_BUILDING_IMAGE_OVERRIDES = {
+      'silo': 'images/buildings/silo.png',
+      'barn': 'images/buildings/barn.png',
+      'grocerystore': 'images/buildings/grocery_store.png',
+      'cinema': 'images/buildings/cinema.png',
+      'diner': 'images/buildings/diner.png',
+      'bedandbreakfast': 'images/buildings/bed_and_breakfast.png',
+      'spa': 'images/buildings/spa.png',
+      'giftshop': 'images/buildings/gift_shop.png',
+      'beachcafe': 'images/buildings/beach_cafe.png',
+      'townhall': 'images/buildings/town_hall.png',
+      'trainstation': 'images/buildings/train_station.png'
+    };
 
     function normalizeItemName(name) {
       if (typeof name !== 'string') return '';
@@ -432,6 +445,14 @@
       return image;
     }
 
+    function getHaydayBuildingImage(name) {
+      const normalizedKey = normalizeItemName(name);
+      if (normalizedKey && HAYDAY_BUILDING_IMAGE_OVERRIDES[normalizedKey]) {
+        return HAYDAY_BUILDING_IMAGE_OVERRIDES[normalizedKey];
+      }
+      return '';
+    }
+
     function renderItemVisual(name, fallbackIconClass) {
       const safeName = escapeHtml(name);
       const imagePath = getHaydayItemImage(name);
@@ -440,6 +461,15 @@
       }
       const safeIconClass = escapeHtml(fallbackIconClass || 'fas fa-question-circle');
       return `<span class="hd-item-visual" title="${safeName}"><i class="${safeIconClass}" aria-hidden="true"></i></span>`;
+    }
+
+    function renderBuildingVisual(name, fallbackIconClass) {
+      const safeName = escapeHtml(name);
+      const imagePath = getHaydayBuildingImage(name);
+      if (imagePath) {
+        return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(imagePath)}" alt="${safeName}"></span>`;
+      }
+      return renderItemVisual(name, fallbackIconClass);
     }
 
     const trackedItems = [
@@ -919,9 +949,9 @@
       headerHTML += `<\/tr><tr class="bg-green-800 text-white text-sm"><td class="item-col font-bold">🏷️ Farm Levels<\/td>`;
       accounts.forEach(acc => {
         headerHTML += `<td colspan="2" class="p-2"><div class="flex flex-wrap gap-2 justify-center">
-          <span class="text-xs">Silo <input type="number" value="${acc.siloLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'silo', this.value)"></span>
-          <span class="text-xs">Barn <input type="number" value="${acc.barnLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'barn', this.value)"></span>
-          <span class="text-xs">Exp <input type="number" value="${acc.expansionLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'exp', this.value)"></span>
+          <span class="text-xs flex items-center gap-1">${renderBuildingVisual('Silo', 'fas fa-warehouse')}Silo <input type="number" value="${acc.siloLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'silo', this.value)"></span>
+          <span class="text-xs flex items-center gap-1">${renderBuildingVisual('Barn', 'fas fa-store')}Barn <input type="number" value="${acc.barnLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'barn', this.value)"></span>
+          <span class="text-xs flex items-center gap-1">${renderBuildingVisual('Expansion', 'fas fa-map-marked-alt')}Exp <input type="number" value="${acc.expansionLevel}" class="level-input" onchange="updateFarmLevel(${acc.id}, 'exp', this.value)"></span>
         </div><\/td>`;
       });
       headerHTML += `<\/tr><tr class="bg-green-700 text-white text-sm"><td class="item-col"><\/td>`;
@@ -931,8 +961,9 @@
       let lastCategory = null;
       trackedItems.forEach(item => {
         if (item.category !== lastCategory) {
-          let icon = item.category === 'silo' ? 'fas fa-warehouse' : (item.category === 'barn' ? 'fas fa-store' : 'fas fa-map-marked-alt');
-          tbody.innerHTML += `<tr class="subheader"><td colspan="${1+accounts.length*2}" class="py-3 px-4"><i class="${icon} mr-2"></i> ${item.category.toUpperCase()}<\/td><\/tr>`;
+          const categoryName = item.category === 'silo' ? 'Silo' : (item.category === 'barn' ? 'Barn' : 'Expansion');
+          const icon = item.category === 'silo' ? 'fas fa-warehouse' : (item.category === 'barn' ? 'fas fa-store' : 'fas fa-map-marked-alt');
+          tbody.innerHTML += `<tr class="subheader"><td colspan="${1+accounts.length*2}" class="py-3 px-4">${renderBuildingVisual(categoryName, icon)} ${item.category.toUpperCase()}<\/td><\/tr>`;
           lastCategory = item.category;
         }
         let totalCurrent = 0;
@@ -968,7 +999,7 @@
       headerHTML += `<\/tr>`;
       headerRow.innerHTML = headerHTML;
       townBuildings.forEach(building => {
-        let buildingRow = `<tr class="bg-amber-700 text-white"><td class="item-col font-bold"><i class="fas fa-store mr-2"></i> ${building.name}<\/td>`;
+        let buildingRow = `<tr class="bg-amber-700 text-white"><td class="item-col font-bold">${renderBuildingVisual(building.name, 'fas fa-store')} ${escapeHtml(building.name)}<\/td>`;
         accounts.forEach(acc => {
           const level = (acc.townLevels[building.name] !== undefined) ? acc.townLevels[building.name] : 1;
           buildingRow += `<td colspan="2" class="p-2"><input type="number" value="${level}" class="building-level-input" onchange="updateTownLevel(${acc.id}, '${building.name}', this.value)"><\/td>`;
