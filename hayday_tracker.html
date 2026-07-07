@@ -411,11 +411,25 @@
       return image;
     }
 
+    function getHaydayFallbackItemImage() {
+      const data = window.HAYDAY_PRODUCT_DATA;
+      const items = data && Array.isArray(data.items) ? data.items : [];
+      const generic = items.find(item => item && typeof item.image === 'string' && /\/products\.(webp|png|jpe?g)$/i.test(item.image));
+      if (generic && typeof generic.image === 'string') return generic.image.trim();
+      const goodsList = items.find(item => item && typeof item.image === 'string' && /\/goods_list\.(webp|png|jpe?g)$/i.test(item.image));
+      if (goodsList && typeof goodsList.image === 'string') return goodsList.image.trim();
+      return '';
+    }
+
     function renderItemVisual(name, fallbackIconClass) {
       const safeName = escapeHtml(name);
       const imagePath = getHaydayItemImage(name);
       if (imagePath) {
         return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(imagePath)}" alt="${safeName}"></span>`;
+      }
+      const fallbackImage = getHaydayFallbackItemImage();
+      if (fallbackImage) {
+        return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(fallbackImage)}" alt="${safeName}"></span>`;
       }
       const safeIconClass = escapeHtml(fallbackIconClass || 'fas fa-question-circle');
       return `<span class="hd-item-visual" title="${safeName}"><i class="${safeIconClass}" aria-hidden="true"></i></span>`;
