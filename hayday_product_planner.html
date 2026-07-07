@@ -48,6 +48,7 @@
 
     .result-card {
       transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+      height: 100%;
     }
 
     .result-card:hover {
@@ -72,23 +73,26 @@
 
     .planner-card {
       padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
     }
 
     .planner-card-top {
       display: grid;
-      grid-template-columns: 124px minmax(0, 1fr) auto;
-      gap: 1rem;
+      grid-template-columns: 104px minmax(0, 1fr) 92px;
+      gap: 12px;
       align-items: start;
+      flex: 1;
     }
 
     .planner-product-image {
-      width: 124px;
-      height: 124px;
+      width: 104px;
+      height: 104px;
       overflow: hidden;
-      border-radius: 1.35rem;
-      border: 1px solid #dbe4ee;
-      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      border-radius: 18px;
+      border: 1px solid #dbe4ef;
+      background: #f8fafc;
       flex-shrink: 0;
     }
 
@@ -96,153 +100,214 @@
       width: 100%;
       height: 100%;
       object-fit: contain;
-      padding: 10px;
+      padding: 6px;
       display: block;
     }
 
-    .planner-visual {
-      display: inline-flex;
+    .planner-card-main {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .planner-asset-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .product-card-title {
+      font-size: 1.05rem;
+      font-weight: 900;
+      line-height: 1.15;
+      color: #0f172a;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      white-space: normal;
+    }
+
+    .building-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+    }
+
+    .building-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: #f8fafc;
+      border: 1px solid #dbe4ef;
+      display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
       overflow: hidden;
-      box-sizing: border-box;
-      vertical-align: middle;
     }
 
-    .planner-visual img {
+    .building-icon img {
       width: 100%;
       height: 100%;
       object-fit: contain;
+      padding: 3px;
       display: block;
     }
 
-    .planner-visual--building {
-      width: 34px;
-      height: 34px;
-      border-radius: 11px;
+    .building-icon--fallback {
+      color: #64748b;
+      font-size: 18px;
       background: #f8fafc;
-      border: 1px solid #dbe4ee;
     }
 
-    .planner-visual--building img {
-      padding: 3px;
+    .building-name {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
+      max-width: 100%;
     }
 
-    .planner-chip {
+    .building-name--text {
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-align: center;
+      flex: 1 1 100%;
+    }
+
+    .needs-row {
+      margin-top: 8px;
+    }
+
+    .needs-label {
+      font-size: 0.72rem;
+      font-weight: 900;
+      color: #64748b;
+      letter-spacing: 0.18em;
+    }
+
+    .needs-chips {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .need-chip {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: 5px;
+      min-height: 34px;
+      padding: 4px 9px 4px 5px;
       border-radius: 999px;
-      padding: 0.42rem 0.72rem;
-      border: 1px solid #e2e8f0;
       background: #f8fafc;
+      border: 1px solid #dbe4ef;
       color: #0f172a;
       font-size: 0.82rem;
-      font-weight: 700;
+      font-weight: 900;
       line-height: 1;
     }
 
-    .planner-chip img {
-      width: 22px;
-      height: 22px;
-      object-fit: contain;
-      flex-shrink: 0;
-    }
-
-    .planner-chip--accent {
+    .need-chip.selected {
       background: #dcfce7;
       border-color: #86efac;
-      color: #14532d;
+      color: #166534;
       box-shadow: 0 8px 20px rgba(34, 197, 94, 0.12);
     }
 
-    .planner-chip--muted {
-      background: #f8fafc;
-      color: #334155;
-    }
-
-    .planner-meta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      align-items: center;
-      justify-content: flex-end;
-    }
-
-    .planner-meta-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.42rem 0.7rem;
-      border-radius: 999px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      color: #0f172a;
-      font-size: 0.84rem;
-      font-weight: 700;
-      line-height: 1;
-    }
-
-    .planner-meta-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 18px;
-      height: 18px;
+    .need-chip img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
       flex-shrink: 0;
     }
 
-    .planner-meta-icon img {
+    .need-chip .need-chip-name {
+      display: none;
+    }
+
+    .compact-meta-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px 3px;
+      justify-items: center;
+      align-items: center;
+      padding-top: 2px;
+    }
+
+    .meta-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .meta-icon img {
       width: 100%;
       height: 100%;
       display: block;
       object-fit: contain;
     }
 
-    .planner-time-row {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      justify-content: flex-end;
-      font-size: 0.84rem;
-      font-weight: 700;
-      color: #475569;
+    .meta-value {
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: #0f172a;
       line-height: 1;
+      letter-spacing: -0.01em;
+      font-variant-numeric: tabular-nums;
     }
 
-    .planner-needs-row,
+    .meta-time {
+      grid-column: 1 / -1;
+      margin-top: 3px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #475569;
+      line-height: 1;
+      justify-self: center;
+    }
+
+    .meta-time .meta-icon {
+      width: 18px;
+      height: 18px;
+    }
+
+    .planner-source-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: auto;
+    }
+
+    .planner-source-row a {
+      font-size: 0.66rem;
+      font-weight: 500;
+      color: #64748b;
+      letter-spacing: 0.02em;
+    }
+
     .planner-links-row {
       display: flex;
       flex-wrap: wrap;
       gap: 0.4rem;
-    }
-
-    .planner-building-line,
-    .planner-selected-line {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.45rem;
-    }
-
-    .planner-selected-line .planner-chip {
-      padding: 0.48rem 0.82rem;
-      font-size: 0.84rem;
-    }
-
-    .planner-selected-line .planner-chip img {
-      width: 26px;
-      height: 26px;
-    }
-
-    .planner-needs-row .planner-chip {
-      padding: 0.45rem 0.78rem;
-    }
-
-    .planner-needs-row .planner-chip img {
-      width: 24px;
-      height: 24px;
     }
 
     .planner-card-body {
@@ -250,41 +315,34 @@
       gap: 0.85rem;
     }
 
-    .planner-card-main {
-      min-width: 0;
-      display: grid;
-      gap: 0.55rem;
-    }
-
     .planner-card-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      justify-self: end;
-      gap: 0.45rem;
-      min-width: 132px;
-      text-align: right;
+      min-width: 92px;
     }
 
     @media (max-width: 640px) {
       .planner-card-top {
-        grid-template-columns: 1fr;
+        grid-template-columns: 88px minmax(0, 1fr);
       }
 
       .planner-product-image {
-        margin-inline: auto;
+        width: 88px;
+        height: 88px;
+      }
+
+      .building-icon {
+        width: 42px;
+        height: 42px;
       }
 
       .planner-card-meta {
-        align-items: flex-start;
-        justify-self: stretch;
-        text-align: left;
+        grid-column: 2 / 3;
+        grid-row: 2;
+        justify-self: start;
         min-width: 0;
       }
 
-      .planner-meta-row,
-      .planner-time-row {
-        justify-content: flex-start;
+      .compact-meta-panel {
+        justify-items: start;
       }
     }
   </style>
@@ -686,6 +744,18 @@
         return '<span class="planner-chip planner-chip--muted" title="' + escapeHtml(sourceName || '') + '">' + escapeHtml(sourceName || 'Building') + '</span>';
       }
 
+      function renderBuildingRow(sourceName) {
+        var buildingName = String(sourceName || 'Building');
+        var imagePath = getBuildingImageByName(buildingName);
+        var iconHtml = imagePath
+          ? '<span class="building-icon" title="' + escapeHtml(buildingName) + '"><img src="' + escapeHtml(imagePath) + '" alt="' + escapeHtml(buildingName) + '"></span>'
+          : '<span class="building-icon building-icon--fallback" title="' + escapeHtml(buildingName) + '"><i class="fas fa-industry"></i></span>';
+        return '<div class="building-row">' +
+          iconHtml +
+          '<span class="building-name building-name--text" title="' + escapeHtml(buildingName) + '">' + escapeHtml(buildingName) + '</span>' +
+        '</div>';
+      }
+
       function renderIngredientChip(ingredient) {
         var ingredientName = ingredient && ingredient.name ? ingredient.name : '';
         var qty = ingredient && ingredient.qty != null ? ingredient.qty : 1;
@@ -714,13 +784,53 @@
         '</span>';
       }
 
+      function renderNeedChip(name, qty, selected) {
+        var ingredientName = String(name || 'Ingredient');
+        var quantity = qty != null ? qty : 1;
+        var item = getItemByQuery(ingredientName);
+        var imagePath = item ? resolveImage(item) : makeFallbackArt(ingredientName, 'HAY DAY');
+        var chipClass = selected ? 'need-chip selected' : 'need-chip';
+        return '<span class="' + chipClass + '" title="' + escapeHtml(ingredientName) + '">' +
+          '<img src="' + escapeHtml(imagePath) + '" alt="' + escapeHtml(ingredientName) + '">' +
+          '<span>x' + escapeHtml(quantity) + '</span>' +
+        '</span>';
+      }
+
+      function renderNeedsChips(selectedItem, selectedQtyUsed, otherIngredients) {
+        var chips = [];
+        var selectedName = selectedItem && selectedItem.name ? selectedItem.name : String(selectedItem || '').trim();
+        var selectedQty = selectedQtyUsed != null ? selectedQtyUsed : 1;
+
+        if (selectedName) {
+          chips.push(renderNeedChip(selectedName, selectedQty, true));
+        }
+
+        if (Array.isArray(otherIngredients)) {
+          otherIngredients.forEach(function (ingredient) {
+            if (!ingredient) return;
+            var ingredientName = ingredient.name || ingredient.id || '';
+            if (!ingredientName) return;
+            chips.push(renderNeedChip(ingredientName, ingredient.qty != null ? ingredient.qty : 1, false));
+          });
+        }
+
+        return '<div class="needs-row">' +
+          '<div class="needs-label">NEEDS:</div>' +
+          '<div class="needs-chips">' + chips.join('') + '</div>' +
+        '</div>';
+      }
+
       function renderCompactMetaRow(entry) {
         var timeValue = entry.masteredTimeMin != null ? entry.masteredTimeMin : entry.productionTimeMin;
         var timeLabel = formatMinutes(timeValue);
-        var priceChip = '<span class="planner-meta-chip"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.coins) + '" alt=""></span><span>' + formatCoins(entry.maxPrice) + '</span></span>';
-        var xpChip = entry.xp != null ? '<span class="planner-meta-chip"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.xp) + '" alt=""></span><span>' + formatCoins(entry.xp) + ' XP</span></span>' : '';
-        var timeChip = '<div class="planner-time-row"><span class="planner-meta-icon"><img src="' + escapeHtml(plannerMetricIcons.time) + '" alt=""></span><span>' + escapeHtml(timeLabel) + '</span></div>';
-        return '<div class="planner-meta-row">' + priceChip + xpChip + '</div>' + timeChip;
+        var xpValue = entry.xp != null ? formatCoins(entry.xp) : '-';
+        return '<div class="compact-meta-panel">' +
+          '<span class="meta-icon"><img src="' + escapeHtml(plannerMetricIcons.coins) + '" alt="Coins"></span>' +
+          '<span class="meta-icon"><img src="' + escapeHtml(plannerMetricIcons.xp) + '" alt="XP"></span>' +
+          '<span class="meta-value">' + formatCoins(entry.maxPrice) + '</span>' +
+          '<span class="meta-value">' + xpValue + '</span>' +
+          '<div class="meta-time"><span class="meta-icon"><img src="' + escapeHtml(plannerMetricIcons.time) + '" alt="Time"></span><span>' + escapeHtml(timeLabel) + '</span></div>' +
+        '</div>';
       }
 
       function guessTitleFromId(id) {
@@ -1028,7 +1138,6 @@
         var grid = document.getElementById('resultsGrid');
         var emptyState = document.getElementById('emptyState');
         var selectedItem = getSelectedItem();
-        var selectedName = selectedItem ? selectedItem.name : 'this item';
         grid.innerHTML = '';
 
         if (!entries.length) {
@@ -1044,33 +1153,23 @@
           var card = document.createElement('article');
           card.className = 'result-card glass-panel overflow-hidden rounded-3xl border border-slate-200 planner-card';
           var imageSrc = resolveImage(entry);
-          var needsChips = entry.otherIngredients && entry.otherIngredients.length ? entry.otherIngredients.map(function (ingredient) {
-            return renderIngredientChip(ingredient);
-          }).join('') : '<span class="text-sm text-slate-500">None</span>';
-          var sourceLink = entry.wikiUrl ? '<a class="font-semibold text-emerald-700 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Source</a>' : '';
+          var sourceLink = entry.wikiUrl ? '<a class="text-[10px] font-medium text-slate-500 hover:text-slate-700 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Source</a>' : '';
+          var buildingSource = entry.source || (entry.item && entry.item.source) || '';
 
           card.innerHTML =
             '<div class="planner-card-top">' +
-              '<div class="planner-product-image">' +
-                '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-contain">' +
+              '<div class="planner-asset-col">' +
+                '<div class="planner-product-image">' +
+                  '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-contain">' +
+                '</div>' +
+                renderBuildingRow(buildingSource) +
               '</div>' +
               '<div class="planner-card-main">' +
                 '<div class="min-w-0">' +
-                  '<h3 class="truncate text-lg font-black text-slate-900">' + escapeHtml(entry.productName) + '</h3>' +
-                  '<div class="planner-building-line mt-1">' + renderCompactBuildingVisual(entry.source || (entry.item && entry.item.source) || '') + '</div>' +
-                  '<div class="planner-selected-line mt-2">' + renderSelectedIngredientChip(selectedName, entry.selectedQtyUsed) + '</div>' +
+                  '<h3 class="product-card-title">' + escapeHtml(entry.productName) + '</h3>' +
+                  renderNeedsChips(selectedItem, entry.selectedQtyUsed, entry.otherIngredients) +
                 '</div>' +
-                '<div class="planner-card-body">' +
-                  '<div>' +
-                    '<div class="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Needs:</div>' +
-                    '<div class="planner-needs-row">' + needsChips + '</div>' +
-                  '</div>' +
-                  '<div class="mt-2 flex items-center justify-end">' +
-                    '<div class="flex items-center gap-2 text-xs text-slate-500">' +
-                      (sourceLink ? sourceLink : '<span class="text-slate-400">Source unavailable</span>') +
-                    '</div>' +
-                  '</div>' +
-                '</div>' +
+                '<div class="planner-source-row">' + (sourceLink ? sourceLink : '<span class="text-[10px] font-medium text-slate-400">Source unavailable</span>') + '</div>' +
               '</div>' +
               '<div class="planner-card-meta">' +
                 renderCompactMetaRow(entry) +
