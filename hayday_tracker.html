@@ -359,6 +359,23 @@
     }
 
     let haydayItemLookupCache = null;
+    const HAYDAY_ITEM_IMAGE_OVERRIDES = {
+      'nails': 'images/items/nail.png',
+      'screws': 'images/items/screw.png',
+      'woodpanels': 'images/items/wood_panel.png',
+      'bolts': 'images/items/bolt.png',
+      'planks': 'images/items/plank.png',
+      'ducttape': 'images/items/duct_tape.png',
+      'landdeed': 'images/items/land_deed.png',
+      'mallet': 'images/items/mallet.png',
+      'markerstake': 'images/items/marker_stake.png',
+      'brick': 'images/items/brick.png',
+      'hammer': 'images/items/hammer.png',
+      'handdrill': 'images/items/hand_drill.png',
+      'paintbucket': 'images/items/paint_bucket.png',
+      'stoneblock': 'images/items/stone_block.png',
+      'tarbucket': 'images/items/tar_bucket.png'
+    };
 
     function normalizeItemName(name) {
       if (typeof name !== 'string') return '';
@@ -405,20 +422,14 @@
     }
 
     function getHaydayItemImage(name) {
+      const normalizedKey = normalizeItemName(name);
+      if (normalizedKey && HAYDAY_ITEM_IMAGE_OVERRIDES[normalizedKey]) {
+        return HAYDAY_ITEM_IMAGE_OVERRIDES[normalizedKey];
+      }
       const item = getHaydayItemByName(name);
       if (!item || typeof item !== 'object') return '';
       const image = typeof item.image === 'string' ? item.image.trim() : '';
       return image;
-    }
-
-    function getHaydayFallbackItemImage() {
-      const data = window.HAYDAY_PRODUCT_DATA;
-      const items = data && Array.isArray(data.items) ? data.items : [];
-      const generic = items.find(item => item && typeof item.image === 'string' && /\/products\.(webp|png|jpe?g)$/i.test(item.image));
-      if (generic && typeof generic.image === 'string') return generic.image.trim();
-      const goodsList = items.find(item => item && typeof item.image === 'string' && /\/goods_list\.(webp|png|jpe?g)$/i.test(item.image));
-      if (goodsList && typeof goodsList.image === 'string') return goodsList.image.trim();
-      return '';
     }
 
     function renderItemVisual(name, fallbackIconClass) {
@@ -426,10 +437,6 @@
       const imagePath = getHaydayItemImage(name);
       if (imagePath) {
         return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(imagePath)}" alt="${safeName}"></span>`;
-      }
-      const fallbackImage = getHaydayFallbackItemImage();
-      if (fallbackImage) {
-        return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(fallbackImage)}" alt="${safeName}"></span>`;
       }
       const safeIconClass = escapeHtml(fallbackIconClass || 'fas fa-question-circle');
       return `<span class="hd-item-visual" title="${safeName}"><i class="${safeIconClass}" aria-hidden="true"></i></span>`;
