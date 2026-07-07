@@ -1,0 +1,77 @@
+{
+  "generatedAt": "2026-07-07T07:31:00.114Z",
+  "sourcePages": [
+    {
+      "label": "Goods List",
+      "url": "https://hayday.fandom.com/wiki/Goods_List",
+      "pageTitle": "Goods_List",
+      "kind": "goods-list",
+      "length": 438282
+    },
+    {
+      "label": "Products",
+      "url": "https://hayday.fandom.com/wiki/Products",
+      "pageTitle": "Products",
+      "kind": "products",
+      "length": 253612
+    },
+    {
+      "label": "Category:Products",
+      "url": "https://hayday.fandom.com/wiki/Category:Products",
+      "pageTitle": "Category:Products",
+      "kind": "category",
+      "length": 948
+    },
+    {
+      "label": "Category:Crops",
+      "url": "https://hayday.fandom.com/wiki/Category:Crops",
+      "pageTitle": "Category:Crops",
+      "kind": "category",
+      "length": 940
+    },
+    {
+      "label": "Category:Trees and Bushes",
+      "url": "https://hayday.fandom.com/wiki/Category:Trees_and_Bushes",
+      "pageTitle": "Category:Trees and Bushes",
+      "kind": "category",
+      "length": 1107
+    },
+    {
+      "label": "Category:Products",
+      "url": "https://hayday.fandom.com/wiki/Category%3AProducts",
+      "count": 3,
+      "kind": "categorymembers"
+    },
+    {
+      "label": "Category:Animal goods",
+      "url": "https://hayday.fandom.com/wiki/Category%3AAnimal_goods",
+      "count": 0,
+      "kind": "categorymembers"
+    },
+    {
+      "label": "Category:Crops",
+      "url": "https://hayday.fandom.com/wiki/Category%3ACrops",
+      "count": 2,
+      "kind": "categorymembers"
+    },
+    {
+      "label": "Category:Trees and Bushes",
+      "url": "https://hayday.fandom.com/wiki/Category%3ATrees_and_Bushes",
+      "count": 20,
+      "kind": "categorymembers"
+    }
+  ],
+  "itemCount": 441,
+  "productsWithIngredientsCount": 390,
+  "reverseIndexIngredientCount": 142,
+  "reverseIndexEntryCount": 1010,
+  "imagesFoundCount": 441,
+  "imagesDownloadedCount": 441,
+  "imageFailures": [],
+  "parseWarnings": [
+    "Source page skipped for Category:Animal goods: Unable to parse wiki page: Category:Animal goods",
+    "Page fetch failed for Shepherd's pie: HTTP 429 while fetching https://hayday.fandom.com/api.php?action=parse&page=Shepherd's_Pie&prop=text|images&format=json"
+  ],
+  "sampleFallbackUsed": false,
+  "itemsFetchedCount": 440
+}

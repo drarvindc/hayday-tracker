@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hay Day Product Planner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(16, 185, 129, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(245, 158, 11, 0.14), transparent 24%),
+        linear-gradient(180deg, #f8fdf9 0%, #f7f7f4 100%);
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border-radius: 999px;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .sort-pill {
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .sort-pill:hover {
+      transform: translateY(-1px);
+    }
+
+    .sort-pill-active {
+      box-shadow: 0 12px 24px rgba(22, 101, 52, 0.18);
+      background: #166534 !important;
+      color: white !important;
+    }
+
+    .result-card {
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .result-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+      border-color: rgba(22, 101, 52, 0.25);
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+      height: 8px;
+      width: 8px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-thumb {
+      background: rgba(22, 101, 52, 0.25);
+      border-radius: 999px;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar-track {
+      background: transparent;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-800">
+  <header class="relative overflow-hidden border-b border-emerald-100/80 bg-white/70">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute -top-24 right-0 h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl"></div>
+      <div class="absolute -bottom-20 left-12 h-72 w-72 rounded-full bg-amber-200/30 blur-3xl"></div>
+    </div>
+    <div class="relative mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-[0.28em] text-emerald-700">Planning tool</p>
+        <h1 class="mt-1 text-3xl font-black text-slate-900 lg:text-4xl">Hay Day Product Planner</h1>
+        <p class="mt-2 max-w-3xl text-sm text-slate-600">
+          Pick an ingredient surplus, sort the recipes, and see which products are fastest, richest, and lightest on bottleneck ingredients.
+        </p>
+      </div>
+      <nav class="flex flex-wrap gap-2 text-sm">
+        <a href="hayday_dashboard.html" class="chip bg-emerald-100 text-emerald-800 hover:bg-emerald-200">
+          <i class="fas fa-chart-pie"></i> Dashboard
+        </a>
+        <a href="hayday_tracker.html" class="chip bg-blue-100 text-blue-800 hover:bg-blue-200">
+          <i class="fas fa-desktop"></i> Desktop Tracker
+        </a>
+        <a href="hayday_mobile.html" class="chip bg-amber-100 text-amber-900 hover:bg-amber-200">
+          <i class="fas fa-mobile-alt"></i> Mobile Tracker
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 py-6 lg:py-8">
+    <section class="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
+      <div class="glass-panel rounded-3xl p-5 lg:p-6">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">Ingredient selector</p>
+            <h2 class="mt-1 text-xl font-black text-slate-900">I have this item</h2>
+          </div>
+          <div class="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
+            <span id="dataMetaLabel">Loading data...</span>
+          </div>
+        </div>
+
+        <div class="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_150px]">
+          <div class="relative">
+            <label class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500" for="itemSearchInput">Search item</label>
+            <div class="relative">
+              <i class="fas fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input id="itemSearchInput" type="search" autocomplete="off" placeholder="White Sugar, Sugarcane, Plain Cupcake..."
+                class="w-full rounded-2xl border border-slate-200 bg-white px-11 py-3.5 text-base outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+            </div>
+            <div id="suggestionsPanel" class="absolute z-20 mt-2 hidden w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"></div>
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-bold uppercase tracking-[0.22em] text-slate-500" for="quantityInput">Quantity</label>
+            <input id="quantityInput" type="number" min="1" value="40"
+              class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3.5 text-base outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+          </div>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2 text-sm" id="quickSelectChips"></div>
+      </div>
+
+      <div class="glass-panel rounded-3xl p-5 lg:p-6">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">At a glance</p>
+            <h2 id="selectedItemTitle" class="mt-1 text-2xl font-black text-slate-900">Pick an item</h2>
+          </div>
+          <div class="rounded-2xl bg-emerald-50 px-3 py-2 text-right">
+            <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">On hand</div>
+            <div id="availableQtyBadge" class="text-xl font-black text-emerald-900">40</div>
+          </div>
+        </div>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+          <div class="rounded-2xl bg-slate-50 p-4">
+            <div class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Matches</div>
+            <div id="matchesCount" class="mt-1 text-2xl font-black text-slate-900">0</div>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-4">
+            <div class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Best coins / min</div>
+            <div id="bestCoinsPerMinute" class="mt-1 text-2xl font-black text-slate-900">-</div>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-4">
+            <div class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Best sell price</div>
+            <div id="bestSellPrice" class="mt-1 text-2xl font-black text-slate-900">-</div>
+          </div>
+          <div class="rounded-2xl bg-slate-50 p-4">
+            <div class="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Fewest ingredients</div>
+            <div id="fewestIngredients" class="mt-1 text-2xl font-black text-slate-900">-</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="glass-panel mt-5 rounded-3xl p-5 lg:p-6">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">Ranking controls</p>
+          <h2 class="mt-1 text-xl font-black text-slate-900">Sort and filter the recipe list</h2>
+        </div>
+        <div class="flex flex-wrap gap-2 overflow-x-auto pb-1 scrollbar-thin" id="sortButtons"></div>
+      </div>
+
+      <div class="mt-5 grid gap-3 lg:grid-cols-3">
+        <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <input id="hideUnknownCheckbox" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+          <span>
+            <span class="block text-sm font-bold text-slate-900">Hide products with unknown recipe/time</span>
+            <span class="block text-xs text-slate-500">Keeps incomplete rows out of the shortlist.</span>
+          </span>
+        </label>
+
+        <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <input id="preferNonBottleneckCheckbox" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+          <span>
+            <span class="block text-sm font-bold text-slate-900">Prefer non-bottleneck recipes</span>
+            <span class="block text-xs text-slate-500">Moves simpler recipes ahead of sugar, dairy, jam, sauce, metal, and rare chains.</span>
+          </span>
+        </label>
+
+        <label class="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+          <input id="minQtyCheckbox" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+          <span class="flex-1">
+            <span class="block text-sm font-bold text-slate-900">Show only products that consume at least X of selected item</span>
+            <span class="mt-2 flex items-center gap-2 text-xs text-slate-500">
+              <span>X</span>
+              <input id="minQtyInput" type="number" min="1" value="2"
+                class="w-24 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100">
+            </span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="mt-5">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Results</p>
+          <h2 id="resultsHeading" class="text-2xl font-black text-slate-900">Choose an item to begin</h2>
+        </div>
+        <div id="resultsBadge" class="rounded-full bg-slate-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.2em] text-white">
+          0 recipes
+        </div>
+      </div>
+
+      <div id="emptyState" class="glass-panel hidden rounded-3xl p-8 text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">
+          <i class="fas fa-seedling"></i>
+        </div>
+        <h3 class="mt-4 text-xl font-black text-slate-900">No products found using this item.</h3>
+        <p class="mt-2 text-sm text-slate-500">Try another ingredient or relax the filters.</p>
+      </div>
+
+      <div id="resultsGrid" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+
+    <footer class="mt-10 border-t border-slate-200 pt-5 text-center text-xs leading-6 text-slate-500">
+      <p>Hay Day item data and images are pulled from public web sources including Hay Day Wiki/Fandom for private personal use.</p>
+      <p class="mt-1">Sample data is bundled so the planner still works while the importer is being tuned.</p>
+    </footer>
+  </main>
+
+  <script src="data/hayday_product_data.js"></script>
+  <script>
+    (function () {
+      var rawData = window.HAYDAY_PRODUCT_DATA || { items: [], reverseIndex: {}, generatedAt: '', sources: [] };
+      var items = Array.isArray(rawData.items) ? rawData.items.slice() : [];
+      var reverseIndex = rawData.reverseIndex || {};
+      var itemById = {};
+      var itemList = [];
+      var state = {
+        selectedId: '',
+        sortMode: 'fastest',
+        quantity: 40,
+        hideUnknown: false,
+        preferNonBottleneck: false,
+        minQtyEnabled: false,
+        minQty: 2,
+        query: ''
+      };
+      var sortOptions = [
+        { id: 'fastest', label: 'Fastest', icon: 'fa-stopwatch' },
+        { id: 'highest_price', label: 'Highest sell price', icon: 'fa-coins' },
+        { id: 'best_coin_min', label: 'Best coins per minute', icon: 'fa-chart-line' },
+        { id: 'best_coin_item', label: 'Best coins per selected item', icon: 'fa-bag-shopping' },
+        { id: 'fewest_ingredients', label: 'Least other ingredients', icon: 'fa-receipt' },
+        { id: 'uses_most', label: 'Uses most of this item', icon: 'fa-fire' }
+      ];
+      var bottleneckWeight = {
+        none: 0,
+        dairy: 1,
+        sugar: 1,
+        sauce: 1,
+        jam: 1,
+        metal: 1,
+        rare: 2,
+        unknown: 3
+      };
+      var rareHints = [
+        'cacao',
+        'coconut',
+        'guava',
+        'passion fruit',
+        'mango',
+        'mint',
+        'chili',
+        'lemon',
+        'peanut',
+        'pomegranate',
+        'blueberry',
+        'blackberry',
+        'raspberry',
+        'coffee',
+        'vanilla'
+      ];
+      var commonDairy = ['milk', 'cream', 'butter', 'cheese', 'goat cheese', 'yogurt'];
+      var sugarHints = ['white sugar', 'brown sugar', 'sugar'];
+      var sauceHints = ['mayo', 'ketchup', 'hot sauce', 'salad dressing', 'bbq', 'chutney', 'relish', 'salsa'];
+      var jamHints = ['jam', 'jelly', 'marmalade', 'preserves', 'curd'];
+      var metalHints = ['bar', 'refined coal', 'ore', 'ingot'];
+
+      function normalize(text) {
+        return String(text || '')
+          .toLowerCase()
+          .trim()
+          .replace(/['’]/g, '')
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '');
+      }
+
+      function escapeHtml(text) {
+        return String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function escapeSvg(text) {
+        return String(text || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&apos;');
+      }
+
+      function hashString(text) {
+        var hash = 0;
+        var str = String(text || '');
+        for (var i = 0; i < str.length; i += 1) {
+          hash = ((hash << 5) - hash) + str.charCodeAt(i);
+          hash |= 0;
+        }
+        return Math.abs(hash);
+      }
+
+      function formatCoins(value) {
+        if (!isFinite(value) || value == null) return '-';
+        return new Intl.NumberFormat('en-US').format(Math.round(value));
+      }
+
+      function formatNumber(value, decimals) {
+        if (!isFinite(value) || value == null) return '-';
+        var places = typeof decimals === 'number' ? decimals : 1;
+        return new Intl.NumberFormat('en-US', {
+          maximumFractionDigits: places,
+          minimumFractionDigits: places
+        }).format(value);
+      }
+
+      function formatMinutes(value) {
+        if (!isFinite(value) || value == null) return 'Unknown';
+        var total = Math.round(value);
+        if (total < 60) return total + 'm';
+        var hours = Math.floor(total / 60);
+        var minutes = total % 60;
+        return hours + 'h' + (minutes ? ' ' + minutes + 'm' : '');
+      }
+
+      function formatOtherIngredients(ingredients) {
+        if (!ingredients || !ingredients.length) return 'None';
+        return ingredients.map(function (ingredient) {
+          return ingredient.name + ' x ' + ingredient.qty;
+        }).join(', ');
+      }
+
+      function guessTitleFromId(id) {
+        var item = itemById[id];
+        return item ? item.name : id.replace(/_/g, ' ');
+      }
+
+      function makeFallbackArt(name, source) {
+        var hash = hashString(name);
+        var hue = hash % 360;
+        var hue2 = (hue + 38) % 360;
+        var initials = String(name || '')
+          .split(/[\s_-]+/)
+          .filter(Boolean)
+          .map(function (part) { return part.charAt(0); })
+          .join('')
+          .slice(0, 2)
+          .toUpperCase() || '?';
+        var shortSource = String(source || '')
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .join(' ')
+          .toUpperCase();
+
+        var svg = [
+          '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">',
+          '<defs>',
+          '<linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">',
+          '<stop offset="0%" stop-color="hsl(' + hue + ', 72%, 42%)"/>',
+          '<stop offset="100%" stop-color="hsl(' + hue2 + ', 72%, 56%)"/>',
+          '</linearGradient>',
+          '</defs>',
+          '<rect width="320" height="320" rx="52" fill="url(#g)"/>',
+          '<circle cx="242" cy="72" r="62" fill="rgba(255,255,255,0.16)"/>',
+          '<circle cx="92" cy="250" r="72" fill="rgba(255,255,255,0.10)"/>',
+          '<rect x="56" y="58" width="208" height="204" rx="40" fill="rgba(255,255,255,0.16)" stroke="rgba(255,255,255,0.26)"/>',
+          '<text x="160" y="155" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="78" font-weight="800" fill="#ffffff">' + escapeSvg(initials) + '</text>',
+          '<text x="160" y="206" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="rgba(255,255,255,0.9)">' + escapeSvg(shortSource || 'HAY DAY') + '</text>',
+          '</svg>'
+        ].join('');
+
+        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+      }
+
+      function resolveImage(item) {
+        if (item.image) return item.image;
+        return makeFallbackArt(item.name, item.source);
+      }
+
+      function isKnownItem(id) {
+        return !!itemById[id];
+      }
+
+      function getItemByQuery(query) {
+        var normalized = normalize(query);
+        if (!normalized) return null;
+
+        if (itemById[normalized]) return itemById[normalized];
+
+        for (var i = 0; i < itemList.length; i += 1) {
+          var candidate = itemList[i];
+          if (normalize(candidate.name) === normalized) return candidate;
+        }
+
+        for (var j = 0; j < itemList.length; j += 1) {
+          var fallback = itemList[j];
+          if (normalize(fallback.name).indexOf(normalized) !== -1 || normalize(fallback.id).indexOf(normalized) !== -1) {
+            return fallback;
+          }
+        }
+
+        return null;
+      }
+
+      function searchItems(query) {
+        var normalized = normalize(query);
+        if (!normalized) return [];
+
+        var matches = itemList.filter(function (item) {
+          return normalize(item.name).indexOf(normalized) !== -1 || normalize(item.id).indexOf(normalized) !== -1;
+        });
+
+        matches.sort(function (a, b) {
+          var aExact = normalize(a.name) === normalized || normalize(a.id) === normalized ? 0 : 1;
+          var bExact = normalize(b.name) === normalized || normalize(b.id) === normalized ? 0 : 1;
+          if (aExact !== bExact) return aExact - bExact;
+          return a.name.localeCompare(b.name);
+        });
+
+        return matches.slice(0, 8);
+      }
+
+      function getSelectedItem() {
+        return itemById[state.selectedId] || null;
+      }
+
+      function getReverseEntries() {
+        if (!state.selectedId) return [];
+        var entries = reverseIndex[state.selectedId];
+        if (!Array.isArray(entries)) return [];
+        return entries.slice();
+      }
+
+      function computeBottleneckFlags(entry) {
+        var flags = [];
+        var haystack = [
+          entry.productName,
+          entry.source,
+          entry.selectedQtyUsed,
+          (entry.otherIngredients || []).map(function (ingredient) { return ingredient.name; }).join(' ')
+        ].join(' ').toLowerCase();
+
+        function containsAny(list) {
+          for (var i = 0; i < list.length; i += 1) {
+            if (haystack.indexOf(list[i]) !== -1) return true;
+          }
+          return false;
+        }
+
+        if (containsAny(commonDairy)) flags.push('dairy');
+        if (containsAny(sugarHints)) flags.push('sugar');
+        if (containsAny(sauceHints)) flags.push('sauce');
+        if (containsAny(jamHints)) flags.push('jam');
+        if (containsAny(metalHints)) flags.push('metal');
+        if (containsAny(rareHints)) flags.push('rare');
+
+        if (!flags.length) flags.push('unknown');
+        return flags;
+      }
+
+      function scoreBottlenecks(flags) {
+        var score = 0;
+        for (var i = 0; i < flags.length; i += 1) {
+          var value = bottleneckWeight[flags[i]] || 0;
+          if (value > score) score = value;
+        }
+        return score;
+      }
+
+      function decorateEntry(entry) {
+        var item = itemById[entry.productId] || {};
+        var productionTimeMin = isFinite(entry.productionTimeMin) ? Number(entry.productionTimeMin) : null;
+        var masteredTimeMin = isFinite(entry.masteredTimeMin) ? Number(entry.masteredTimeMin) : null;
+        var maxPrice = isFinite(entry.maxPrice) ? Number(entry.maxPrice) : null;
+        var selectedQtyUsed = isFinite(entry.selectedQtyUsed) ? Number(entry.selectedQtyUsed) : 0;
+        var otherIngredients = Array.isArray(entry.otherIngredients) ? entry.otherIngredients : [];
+        var coinsPerMinute = productionTimeMin && maxPrice ? maxPrice / productionTimeMin : null;
+        var coinsPerSelectedItem = selectedQtyUsed > 0 && maxPrice ? maxPrice / selectedQtyUsed : null;
+        var bottles = computeBottleneckFlags(entry);
+
+        return {
+          productId: entry.productId,
+          productName: entry.productName,
+          item: item,
+          selectedQtyUsed: selectedQtyUsed,
+          otherIngredients: otherIngredients,
+          otherIngredientCount: otherIngredients.length,
+          productionTimeMin: productionTimeMin,
+          masteredTimeMin: masteredTimeMin,
+          maxPrice: maxPrice,
+          xp: isFinite(entry.xp) ? Number(entry.xp) : null,
+          source: entry.source || (item && item.source) || '',
+          image: entry.image || (item && item.image) || '',
+          wikiUrl: entry.wikiUrl || (item && item.wikiUrl) || '',
+          coinsPerMinute: coinsPerMinute,
+          coinsPerSelectedItem: coinsPerSelectedItem,
+          bottleneckFlags: bottles,
+          bottleneckScore: scoreBottlenecks(bottles),
+          craftsFromStock: state.quantity > 0 && selectedQtyUsed > 0 ? Math.floor(state.quantity / selectedQtyUsed) : null
+        };
+      }
+
+      function applyFilters(entries) {
+        var minQtyThreshold = state.minQtyEnabled ? Number(state.minQty) || 1 : 1;
+
+        return entries.filter(function (entry) {
+          if (state.hideUnknown) {
+            if (!entry.productionTimeMin || !entry.maxPrice) return false;
+          }
+          if (state.minQtyEnabled && entry.selectedQtyUsed < minQtyThreshold) return false;
+          return true;
+        });
+      }
+
+      function sortEntries(entries) {
+        return entries.sort(function (a, b) {
+          if (state.preferNonBottleneck) {
+            if (a.bottleneckScore !== b.bottleneckScore) return a.bottleneckScore - b.bottleneckScore;
+          }
+
+          var diff;
+          switch (state.sortMode) {
+            case 'highest_price':
+              diff = (b.maxPrice || -1) - (a.maxPrice || -1);
+              break;
+            case 'best_coin_min':
+              diff = (b.coinsPerMinute || -1) - (a.coinsPerMinute || -1);
+              break;
+            case 'best_coin_item':
+              diff = (b.coinsPerSelectedItem || -1) - (a.coinsPerSelectedItem || -1);
+              break;
+            case 'fewest_ingredients':
+              diff = a.otherIngredientCount - b.otherIngredientCount;
+              break;
+            case 'uses_most':
+              diff = b.selectedQtyUsed - a.selectedQtyUsed;
+              break;
+            case 'fastest':
+            default:
+              diff = (a.productionTimeMin || Infinity) - (b.productionTimeMin || Infinity);
+              break;
+          }
+
+          if (diff !== 0 && isFinite(diff)) return diff;
+
+          if (a.bottleneckScore !== b.bottleneckScore) return a.bottleneckScore - b.bottleneckScore;
+          if ((b.coinsPerMinute || -1) !== (a.coinsPerMinute || -1)) return (b.coinsPerMinute || -1) - (a.coinsPerMinute || -1);
+          return a.productName.localeCompare(b.productName);
+        });
+      }
+
+      function renderSortButtons() {
+        var container = document.getElementById('sortButtons');
+        container.innerHTML = '';
+
+        sortOptions.forEach(function (option) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'sort-pill inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-sm';
+          button.setAttribute('data-sort', option.id);
+          button.innerHTML = '<i class="fas ' + option.icon + '"></i><span>' + option.label + '</span>';
+          if (state.sortMode === option.id) {
+            button.classList.add('sort-pill-active');
+          }
+          button.addEventListener('click', function () {
+            state.sortMode = option.id;
+            render();
+          });
+          container.appendChild(button);
+        });
+      }
+
+      function renderQuickSelectChips() {
+        var container = document.getElementById('quickSelectChips');
+        container.innerHTML = '';
+
+        var sampleItems = itemList.filter(function (item) {
+          return item.id === 'white_sugar' || item.type === 'crop' || item.type === 'product';
+        }).slice(0, 6);
+
+        sampleItems.forEach(function (item) {
+          var button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'chip border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100';
+          button.innerHTML = '<i class="fas fa-wheat-awn"></i><span>' + escapeHtml(item.name) + '</span>';
+          button.addEventListener('click', function () {
+            setSelectedItem(item.id, item.name);
+          });
+          container.appendChild(button);
+        });
+      }
+
+      function renderSuggestions() {
+        var query = document.getElementById('itemSearchInput').value;
+        state.query = query;
+
+        var panel = document.getElementById('suggestionsPanel');
+        var matches = searchItems(query);
+
+        if (!query.trim() || !matches.length) {
+          panel.classList.add('hidden');
+          panel.innerHTML = '';
+          return;
+        }
+
+        panel.innerHTML = '';
+        matches.forEach(function (item) {
+          var row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left last:border-b-0 hover:bg-emerald-50';
+          row.innerHTML = '<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><i class="fas fa-basket-shopping"></i></div>' +
+            '<div class="min-w-0 flex-1"><div class="truncate text-sm font-bold text-slate-900">' + escapeHtml(item.name) + '</div><div class="truncate text-xs text-slate-500">' + escapeHtml(item.source || item.type || 'Item') + '</div></div>';
+          row.addEventListener('click', function () {
+            setSelectedItem(item.id, item.name);
+          });
+          panel.appendChild(row);
+        });
+
+        panel.classList.remove('hidden');
+      }
+
+      function setSelectedItem(id, label) {
+        if (!isKnownItem(id)) {
+          return;
+        }
+        state.selectedId = id;
+        var input = document.getElementById('itemSearchInput');
+        input.value = label || guessTitleFromId(id);
+        document.getElementById('suggestionsPanel').classList.add('hidden');
+        render();
+      }
+
+      function renderResults(entries) {
+        var grid = document.getElementById('resultsGrid');
+        var emptyState = document.getElementById('emptyState');
+        var selectedItem = getSelectedItem();
+        var selectedName = selectedItem ? selectedItem.name : 'this item';
+        grid.innerHTML = '';
+
+        if (!entries.length) {
+          emptyState.classList.remove('hidden');
+          grid.classList.add('hidden');
+          return;
+        }
+
+        emptyState.classList.add('hidden');
+        grid.classList.remove('hidden');
+
+        entries.forEach(function (entry) {
+          var card = document.createElement('article');
+          card.className = 'result-card glass-panel overflow-hidden rounded-3xl border border-slate-200 p-4';
+
+          var flags = entry.bottleneckFlags.map(function (flag) {
+            var color = 'bg-slate-100 text-slate-700';
+            if (flag === 'dairy') color = 'bg-blue-100 text-blue-800';
+            else if (flag === 'sugar') color = 'bg-amber-100 text-amber-900';
+            else if (flag === 'sauce') color = 'bg-orange-100 text-orange-800';
+            else if (flag === 'jam') color = 'bg-pink-100 text-pink-800';
+            else if (flag === 'metal') color = 'bg-slate-200 text-slate-800';
+            else if (flag === 'rare') color = 'bg-violet-100 text-violet-800';
+            return '<span class="chip ' + color + '">' + escapeHtml(flag) + '</span>';
+          }).join('');
+
+          var possibleCrafts = entry.craftsFromStock != null ? '<span class="font-semibold text-emerald-700">' + entry.craftsFromStock + '</span> crafts from your stock' : 'Stock count unavailable';
+          var sourceLink = entry.wikiUrl ? '<a class="font-semibold text-emerald-700 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Wiki</a>' : '';
+          var sourceLabel = entry.source ? '<span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">' + escapeHtml(entry.source) + '</span>' : '';
+          var mastered = entry.masteredTimeMin ? '<div><span class="font-semibold text-slate-500">Mastered:</span> ' + formatMinutes(entry.masteredTimeMin) + '</div>' : '';
+          var xpLine = entry.xp != null ? '<div><span class="font-semibold text-slate-500">XP:</span> ' + formatCoins(entry.xp) + '</div>' : '';
+          var imageSrc = resolveImage(entry);
+          var ingredientText = formatOtherIngredients(entry.otherIngredients);
+
+          card.innerHTML =
+            '<div class="flex gap-4">' +
+              '<div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">' +
+                '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-cover">' +
+              '</div>' +
+              '<div class="min-w-0 flex-1">' +
+                '<div class="flex items-start justify-between gap-3">' +
+                  '<div class="min-w-0">' +
+                    '<h3 class="truncate text-lg font-black text-slate-900">' + escapeHtml(entry.productName) + '</h3>' +
+                  '<div class="mt-1 flex flex-wrap gap-2">' + sourceLabel + '<span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Uses ' + escapeHtml(selectedName) + ' x ' + entry.selectedQtyUsed + '</span></div>' +
+                  '</div>' +
+                  '<div class="text-right">' +
+                    '<div class="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Sell price</div>' +
+                    '<div class="text-2xl font-black text-emerald-700">' + formatCoins(entry.maxPrice) + '</div>' +
+                  '</div>' +
+                '</div>' +
+
+                '<div class="mt-3 space-y-1 text-sm text-slate-600">' +
+                  '<div><span class="font-semibold text-slate-500">Other ingredients:</span> ' + escapeHtml(ingredientText) + '</div>' +
+                  '<div><span class="font-semibold text-slate-500">Production:</span> ' + formatMinutes(entry.productionTimeMin) + mastered + '</div>' +
+                  xpLine +
+                '</div>' +
+
+                '<div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">' +
+                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Coins / min</div><div class="mt-1 text-lg font-black text-slate-900">' + formatNumber(entry.coinsPerMinute, 1) + '</div></div>' +
+                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Coins / item</div><div class="mt-1 text-lg font-black text-slate-900">' + formatNumber(entry.coinsPerSelectedItem, 1) + '</div></div>' +
+                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Other types</div><div class="mt-1 text-lg font-black text-slate-900">' + entry.otherIngredientCount + '</div></div>' +
+                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Bottleneck</div><div class="mt-1 text-lg font-black text-slate-900">' + escapeHtml(entry.bottleneckFlags.join(', ')) + '</div></div>' +
+                '</div>' +
+
+                '<div class="mt-3 flex flex-wrap gap-2">' + flags + '</div>' +
+
+                '<div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">' +
+                  '<div>' + possibleCrafts + '</div>' +
+                  '<div class="flex flex-wrap gap-2">' +
+                    (sourceLink ? sourceLink : '') +
+                    (entry.source ? '<a class="font-semibold text-slate-500 hover:text-slate-800 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Source</a>' : '') +
+                  '</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+
+          grid.appendChild(card);
+        });
+      }
+
+      function updateSummary(entries) {
+        var selected = getSelectedItem();
+        var selectedTitle = document.getElementById('selectedItemTitle');
+        var resultsHeading = document.getElementById('resultsHeading');
+        var resultsBadge = document.getElementById('resultsBadge');
+        var matchesCount = document.getElementById('matchesCount');
+        var bestCoinsPerMinute = document.getElementById('bestCoinsPerMinute');
+        var bestSellPrice = document.getElementById('bestSellPrice');
+        var fewestIngredients = document.getElementById('fewestIngredients');
+        var availableQtyBadge = document.getElementById('availableQtyBadge');
+        var quantityInput = document.getElementById('quantityInput');
+
+        state.quantity = Number(quantityInput.value) || 40;
+        availableQtyBadge.textContent = state.quantity;
+
+        if (!selected) {
+          selectedTitle.textContent = 'Pick an item';
+          resultsHeading.textContent = 'Choose an item to begin';
+          resultsBadge.textContent = entries.length + ' recipes';
+          matchesCount.textContent = '0';
+          bestCoinsPerMinute.textContent = '-';
+          bestSellPrice.textContent = '-';
+          fewestIngredients.textContent = '-';
+          return;
+        }
+
+        selectedTitle.textContent = selected.name;
+        resultsHeading.textContent = 'Recipes using ' + selected.name;
+        resultsBadge.textContent = entries.length + ' recipe' + (entries.length === 1 ? '' : 's');
+        matchesCount.textContent = entries.length;
+
+        if (entries.length) {
+          var fastest = entries.reduce(function (best, current) {
+            if (!best) return current;
+            if (current.productionTimeMin == null) return best;
+            if (best.productionTimeMin == null) return current;
+            return current.productionTimeMin < best.productionTimeMin ? current : best;
+          }, null);
+          var richest = entries.reduce(function (best, current) {
+            if (!best) return current;
+            if ((current.coinsPerMinute || -1) > (best.coinsPerMinute || -1)) return current;
+            return best;
+          }, null);
+          var richestPrice = entries.reduce(function (best, current) {
+            if (!best) return current;
+            if ((current.maxPrice || -1) > (best.maxPrice || -1)) return current;
+            return best;
+          }, null);
+          var fewest = entries.reduce(function (best, current) {
+            if (!best) return current;
+            if (current.otherIngredientCount < best.otherIngredientCount) return current;
+            return best;
+          }, null);
+
+          bestCoinsPerMinute.textContent = richest && richest.coinsPerMinute != null ? formatNumber(richest.coinsPerMinute, 1) + ' (' + richest.productName + ')' : '-';
+          bestSellPrice.textContent = richestPrice && richestPrice.maxPrice != null ? formatCoins(richestPrice.maxPrice) + ' (' + richestPrice.productName + ')' : '-';
+          fewestIngredients.textContent = fewest ? String(fewest.otherIngredientCount) + ' (' + fewest.productName + ')' : '-';
+
+          if (fastest) {
+            var quantityHint = state.quantity > 0 && fastest.selectedQtyUsed > 0 ? Math.floor(state.quantity / fastest.selectedQtyUsed) : 0;
+            resultsHeading.textContent += ' - fastest: ' + fastest.productName + ' (' + formatMinutes(fastest.productionTimeMin) + ')';
+            if (quantityHint) {
+              resultsHeading.textContent += ', up to ' + quantityHint + ' crafts from your stock';
+            }
+          }
+        } else {
+          bestCoinsPerMinute.textContent = '-';
+          bestSellPrice.textContent = '-';
+          fewestIngredients.textContent = '-';
+        }
+      }
+
+      function render() {
+        var selected = getSelectedItem();
+        var entries = applyFilters(getReverseEntries().map(decorateEntry));
+        sortEntries(entries);
+        updateSummary(entries);
+        renderResults(entries);
+        renderSortButtons();
+
+        var label = document.getElementById('dataMetaLabel');
+        if (rawData.generatedAt) {
+          label.textContent = 'Loaded ' + rawData.items.length + ' items';
+        } else {
+          label.textContent = 'Sample data';
+        }
+
+        var resultsBadge = document.getElementById('resultsBadge');
+        resultsBadge.textContent = entries.length + ' recipe' + (entries.length === 1 ? '' : 's');
+
+        if (!selected && items.length) {
+          setSelectedItem(items[0].id, items[0].name);
+        }
+      }
+
+      function wireFilters() {
+        document.getElementById('quantityInput').addEventListener('input', function () {
+          state.quantity = Number(this.value) || 40;
+          document.getElementById('availableQtyBadge').textContent = state.quantity;
+          render();
+        });
+
+        document.getElementById('hideUnknownCheckbox').addEventListener('change', function () {
+          state.hideUnknown = this.checked;
+          render();
+        });
+
+        document.getElementById('preferNonBottleneckCheckbox').addEventListener('change', function () {
+          state.preferNonBottleneck = this.checked;
+          render();
+        });
+
+        document.getElementById('minQtyCheckbox').addEventListener('change', function () {
+          state.minQtyEnabled = this.checked;
+          render();
+        });
+
+        document.getElementById('minQtyInput').addEventListener('input', function () {
+          state.minQty = Number(this.value) || 1;
+          render();
+        });
+
+        var input = document.getElementById('itemSearchInput');
+        input.addEventListener('input', function () {
+          state.query = this.value;
+          var item = getItemByQuery(this.value);
+          if (item && normalize(item.name) === normalize(this.value)) {
+            state.selectedId = item.id;
+            render();
+          } else {
+            renderSuggestions();
+          }
+        });
+
+        input.addEventListener('focus', function () {
+          renderSuggestions();
+        });
+
+        input.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            var item = getItemByQuery(this.value) || searchItems(this.value)[0];
+            if (item) {
+              event.preventDefault();
+              setSelectedItem(item.id, item.name);
+            }
+          } else if (event.key === 'Escape') {
+            document.getElementById('suggestionsPanel').classList.add('hidden');
+          }
+        });
+
+        document.addEventListener('click', function (event) {
+          var searchWrap = document.getElementById('itemSearchInput').parentElement;
+          var panel = document.getElementById('suggestionsPanel');
+          if (!searchWrap.contains(event.target)) {
+            panel.classList.add('hidden');
+          }
+        });
+      }
+
+      function init() {
+        itemList = items.map(function (item) {
+          var copy = Object.assign({}, item);
+          return copy;
+        });
+
+        itemList.forEach(function (item) {
+          itemById[item.id] = item;
+        });
+
+        document.getElementById('dataMetaLabel').textContent = rawData.generatedAt ? 'Loaded ' + itemList.length + ' items' : 'Sample data';
+        renderQuickSelectChips();
+        renderSortButtons();
+        wireFilters();
+
+        var defaultItem = itemById.white_sugar || itemList[0] || null;
+        if (defaultItem) {
+          state.selectedId = defaultItem.id;
+          document.getElementById('itemSearchInput').value = defaultItem.name;
+        }
+
+        render();
+      }
+
+      document.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "hayday-tracker",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Static Hay Day tracker and product planner",
+  "type": "commonjs",
+  "scripts": {
+    "import:hayday": "node tools/import_hayday_wiki.js",
+    "import:hayday:images": "node tools/import_hayday_wiki.js --download-images"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
