@@ -85,6 +85,33 @@
       padding: 4px 0;
       background-color: white;
     }
+    .hd-item-visual {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      margin-right: 8px;
+      border-radius: 10px;
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      vertical-align: middle;
+      overflow: hidden;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
+    .hd-item-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 2px;
+      display: block;
+    }
+    .hd-item-visual i {
+      font-size: 15px;
+      line-height: 1;
+      color: #4b5563;
+    }
     .farm-name-input {
       width: 120px;
       font-size: 1rem;
@@ -254,6 +281,7 @@
     </div>
   </div>
 
+  <script src="data/hayday_product_data.js"></script>
   <script>
     // ---------- GitHub Gist Configuration ----------
     let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
@@ -319,6 +347,78 @@
       if (offset === 0) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":base, "Gold Bar":0, "Platinum Bar":0 };
       else if (offset === 1) return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":base, "Platinum Bar":0 };
       else return { "Refined Coal":base, "Iron Bar":base, "Silver Bar":0, "Gold Bar":0, "Platinum Bar":base };
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    let haydayItemLookupCache = null;
+
+    function normalizeItemName(name) {
+      if (typeof name !== 'string') return '';
+      try {
+        return name
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '');
+      } catch (err) {
+        return String(name)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '');
+      }
+    }
+
+    function getHaydayItemLookup() {
+      if (haydayItemLookupCache) return haydayItemLookupCache;
+      const lookup = new Map();
+      try {
+        const data = window.HAYDAY_PRODUCT_DATA;
+        const items = data && Array.isArray(data.items) ? data.items : [];
+        items.forEach(item => {
+          if (!item || typeof item !== 'object') return;
+          [item.id, item.name].forEach(key => {
+            const normalizedKey = normalizeItemName(key);
+            if (normalizedKey && !lookup.has(normalizedKey)) {
+              lookup.set(normalizedKey, item);
+            }
+          });
+        });
+      } catch (err) {
+        // Ignore malformed or missing import data.
+      }
+      haydayItemLookupCache = lookup;
+      return haydayItemLookupCache;
+    }
+
+    function getHaydayItemByName(name) {
+      const normalizedKey = normalizeItemName(name);
+      if (!normalizedKey) return null;
+      const lookup = getHaydayItemLookup();
+      return lookup.get(normalizedKey) || null;
+    }
+
+    function getHaydayItemImage(name) {
+      const item = getHaydayItemByName(name);
+      if (!item || typeof item !== 'object') return '';
+      const image = typeof item.image === 'string' ? item.image.trim() : '';
+      return image;
+    }
+
+    function renderItemVisual(name, fallbackIconClass) {
+      const safeName = escapeHtml(name);
+      const imagePath = getHaydayItemImage(name);
+      if (imagePath) {
+        return `<span class="hd-item-visual" title="${safeName}"><img src="${escapeHtml(imagePath)}" alt="${safeName}"></span>`;
+      }
+      const safeIconClass = escapeHtml(fallbackIconClass || 'fas fa-question-circle');
+      return `<span class="hd-item-visual" title="${safeName}"><i class="${safeIconClass}" aria-hidden="true"></i></span>`;
     }
 
     const trackedItems = [
@@ -816,7 +916,7 @@
         }
         let totalCurrent = 0;
         accounts.forEach(acc => { totalCurrent += (acc.currents[item.name] || 0); });
-        let row = `<tr><td class="item-col"><i class="${item.icon} mr-2"></i> ${item.name}<\/td>`;
+        let row = `<tr><td class="item-col">${renderItemVisual(item.name, item.icon)}${escapeHtml(item.name)}<\/td>`;
         accounts.forEach(acc => {
           const current = acc.currents[item.name] || 0;
           let farmLevel = 0;
@@ -860,7 +960,7 @@
             if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) totalCurrent += (acc.currents[mat] || 0);
             else if (exclusiveTownMaterials.includes(mat)) totalCurrent += (acc.townCurrents[mat] || 0);
           });
-          let materialRow = `<tr class="border-b"><td class="item-col pl-8 text-sm"><i class="fas fa-cube mr-2"></i> ${mat}<\/td>`;
+          let materialRow = `<tr class="border-b"><td class="item-col pl-8 text-sm">${renderItemVisual(mat, 'fas fa-cube')}${escapeHtml(mat)}<\/td>`;
           accounts.forEach(acc => {
             let currentValue = 0;
             if (sharedMaterials.includes(mat) || expansionMaterials.includes(mat)) currentValue = acc.currents[mat] || 0;
@@ -906,7 +1006,7 @@
         let totalCurrent = 0;
         accounts.forEach(acc => { totalCurrent += (acc.trainCurrents[bar] || 0); });
         let row = `<tr class="border-b">`;
-        row += `<td class="item-col"><i class="fas fa-gem mr-2"></i> ${bar}<\/td>`;
+        row += `<td class="item-col">${renderItemVisual(bar, 'fas fa-gem')}${escapeHtml(bar)}<\/td>`;
         accounts.forEach(acc => {
           const current = acc.trainCurrents[bar] || 0;
           const required = getTrainRequirements(acc.trainLevel || 1)[bar];
