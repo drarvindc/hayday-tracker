@@ -69,6 +69,160 @@
     .scrollbar-thin::-webkit-scrollbar-track {
       background: transparent;
     }
+
+    .planner-card {
+      padding: 1rem;
+    }
+
+    .planner-card-top {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .planner-product-image {
+      width: 88px;
+      height: 88px;
+      overflow: hidden;
+      border-radius: 1.1rem;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+    }
+
+    .planner-product-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .planner-visual {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      box-sizing: border-box;
+      vertical-align: middle;
+    }
+
+    .planner-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .planner-visual--building {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+    }
+
+    .planner-visual--building img {
+      padding: 2px;
+    }
+
+    .planner-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border-radius: 999px;
+      padding: 0.35rem 0.6rem;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #0f172a;
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .planner-chip img {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .planner-chip--accent {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #065f46;
+    }
+
+    .planner-chip--muted {
+      background: #f8fafc;
+      color: #334155;
+    }
+
+    .planner-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      align-items: center;
+    }
+
+    .planner-meta-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.38rem 0.6rem;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #0f172a;
+      font-size: 0.82rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .planner-meta-chip i {
+      color: #64748b;
+    }
+
+    .planner-time-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #475569;
+      line-height: 1;
+    }
+
+    .planner-needs-row,
+    .planner-links-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .planner-building-line,
+    .planner-selected-line {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .planner-card-body {
+      display: grid;
+      gap: 0.85rem;
+    }
+
+    @media (max-width: 640px) {
+      .planner-card-top {
+        grid-template-columns: 1fr;
+      }
+
+      .planner-product-image {
+        margin-inline: auto;
+      }
+    }
   </style>
 </head>
 <body class="min-h-screen text-slate-800">
@@ -291,6 +445,33 @@
       var sauceHints = ['mayo', 'ketchup', 'hot sauce', 'salad dressing', 'bbq', 'chutney', 'relish', 'salsa'];
       var jamHints = ['jam', 'jelly', 'marmalade', 'preserves', 'curd'];
       var metalHints = ['bar', 'refined coal', 'ore', 'ingot'];
+      var buildingImageOverrides = {
+        bakery: 'images/buildings/bakery.png',
+        cakeoven: 'images/buildings/cake_oven.png',
+        candymachine: 'images/buildings/candy_machine.png',
+        coffeekiosk: 'images/buildings/coffee_kiosk.png',
+        cupcakemaker: 'images/buildings/cupcake_maker.png',
+        donutmaker: 'images/buildings/donut_maker.png',
+        fonduepot: 'images/buildings/fondue_pot.png',
+        fudgeshop: 'images/buildings/fudge_shop.png',
+        icecreammaker: 'images/buildings/ice_cream_maker.png',
+        preservationstation: 'images/buildings/preservation_station.png',
+        saucemaker: 'images/buildings/sauce_maker.png',
+        smoothemixer: 'images/buildings/smoothie_mixer.png',
+        smoothiemixer: 'images/buildings/smoothie_mixer.png',
+        wafflemaker: 'images/buildings/waffle_maker.png',
+        silo: 'images/buildings/silo.png',
+        barn: 'images/buildings/barn.png',
+        grocerystore: 'images/buildings/grocery_store.png',
+        cinema: 'images/buildings/cinema.png',
+        diner: 'images/buildings/diner.png',
+        bedandbreakfast: 'images/buildings/bed_and_breakfast.png',
+        spa: 'images/buildings/spa.png',
+        giftshop: 'images/buildings/gift_shop.png',
+        beachcafe: 'images/buildings/beach_cafe.png',
+        townhall: 'images/buildings/town_hall.png',
+        trainstation: 'images/buildings/train_station.png'
+      };
 
       function normalize(text) {
         return String(text || '')
@@ -356,6 +537,68 @@
         return ingredients.map(function (ingredient) {
           return ingredient.name + ' x ' + ingredient.qty;
         }).join(', ');
+      }
+
+      function getItemImageByName(name) {
+        var item = getItemByQuery(name);
+        return item ? resolveImage(item) : '';
+      }
+
+      function getBuildingImageByName(name) {
+        var normalized = normalize(name);
+        return buildingImageOverrides[normalized] || buildingImageOverrides[normalized.replace(/_/g, '')] || '';
+      }
+
+      function renderVisualImage(imagePath, altText, className, titleText) {
+        if (!imagePath) return '';
+        return '<span class="' + className + '" title="' + escapeHtml(titleText || altText || '') + '">' +
+          '<img src="' + escapeHtml(imagePath) + '" alt="' + escapeHtml(altText || '') + '">' +
+        '</span>';
+      }
+
+      function renderCompactBuildingVisual(sourceName) {
+        var imagePath = getBuildingImageByName(sourceName);
+        if (imagePath) {
+          return renderVisualImage(imagePath, sourceName, 'planner-visual planner-visual--building', sourceName);
+        }
+        return '<span class="planner-chip planner-chip--muted" title="' + escapeHtml(sourceName || '') + '">' + escapeHtml(sourceName || 'Building') + '</span>';
+      }
+
+      function renderIngredientChip(ingredient) {
+        var ingredientName = ingredient && ingredient.name ? ingredient.name : '';
+        var qty = ingredient && ingredient.qty != null ? ingredient.qty : 1;
+        var imagePath = getItemImageByName(ingredient && (ingredient.itemId || ingredient.name));
+        if (imagePath) {
+          return '<span class="planner-chip" title="' + escapeHtml(ingredientName) + '">' +
+            '<img src="' + escapeHtml(imagePath) + '" alt="' + escapeHtml(ingredientName) + '">' +
+            '<span>x' + escapeHtml(qty) + '</span>' +
+          '</span>';
+        }
+        return '<span class="planner-chip planner-chip--muted" title="' + escapeHtml(ingredientName) + '">' +
+          escapeHtml(ingredientName || 'Ingredient') + ' x' + escapeHtml(qty) +
+        '</span>';
+      }
+
+      function renderSelectedIngredientChip(selectedItemName, qty) {
+        var imagePath = getItemImageByName(selectedItemName);
+        if (imagePath) {
+          return '<span class="planner-chip planner-chip--accent" title="' + escapeHtml(selectedItemName || '') + '">' +
+            '<img src="' + escapeHtml(imagePath) + '" alt="' + escapeHtml(selectedItemName || '') + '">' +
+            '<span>x' + escapeHtml(qty) + '</span>' +
+          '</span>';
+        }
+        return '<span class="planner-chip planner-chip--accent" title="' + escapeHtml(selectedItemName || '') + '">' +
+          escapeHtml(selectedItemName || 'Selected item') + ' x' + escapeHtml(qty) +
+        '</span>';
+      }
+
+      function renderCompactMetaRow(entry) {
+        var timeValue = entry.masteredTimeMin != null ? entry.masteredTimeMin : entry.productionTimeMin;
+        var timeLabel = formatMinutes(timeValue);
+        var priceChip = '<span class="planner-meta-chip"><i class="fas fa-coins"></i><span>' + formatCoins(entry.maxPrice) + '</span></span>';
+        var xpChip = entry.xp != null ? '<span class="planner-meta-chip"><i class="fas fa-star"></i><span>' + formatCoins(entry.xp) + ' XP</span></span>' : '';
+        var timeChip = '<div class="planner-time-row"><i class="fas fa-clock"></i><span>' + escapeHtml(timeLabel) + '</span></div>';
+        return '<div class="planner-meta-row">' + priceChip + xpChip + '</div>' + timeChip;
       }
 
       function guessTitleFromId(id) {
@@ -677,64 +920,36 @@
 
         entries.forEach(function (entry) {
           var card = document.createElement('article');
-          card.className = 'result-card glass-panel overflow-hidden rounded-3xl border border-slate-200 p-4';
-
-          var flags = entry.bottleneckFlags.map(function (flag) {
-            var color = 'bg-slate-100 text-slate-700';
-            if (flag === 'dairy') color = 'bg-blue-100 text-blue-800';
-            else if (flag === 'sugar') color = 'bg-amber-100 text-amber-900';
-            else if (flag === 'sauce') color = 'bg-orange-100 text-orange-800';
-            else if (flag === 'jam') color = 'bg-pink-100 text-pink-800';
-            else if (flag === 'metal') color = 'bg-slate-200 text-slate-800';
-            else if (flag === 'rare') color = 'bg-violet-100 text-violet-800';
-            return '<span class="chip ' + color + '">' + escapeHtml(flag) + '</span>';
-          }).join('');
-
-          var possibleCrafts = entry.craftsFromStock != null ? '<span class="font-semibold text-emerald-700">' + entry.craftsFromStock + '</span> crafts from your stock' : 'Stock count unavailable';
-          var sourceLink = entry.wikiUrl ? '<a class="font-semibold text-emerald-700 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Wiki</a>' : '';
-          var sourceLabel = entry.source ? '<span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">' + escapeHtml(entry.source) + '</span>' : '';
-          var mastered = entry.masteredTimeMin ? '<div><span class="font-semibold text-slate-500">Mastered:</span> ' + formatMinutes(entry.masteredTimeMin) + '</div>' : '';
-          var xpLine = entry.xp != null ? '<div><span class="font-semibold text-slate-500">XP:</span> ' + formatCoins(entry.xp) + '</div>' : '';
+          card.className = 'result-card glass-panel overflow-hidden rounded-3xl border border-slate-200 planner-card';
           var imageSrc = resolveImage(entry);
-          var ingredientText = formatOtherIngredients(entry.otherIngredients);
+          var needsChips = entry.otherIngredients && entry.otherIngredients.length ? entry.otherIngredients.map(function (ingredient) {
+            return renderIngredientChip(ingredient);
+          }).join('') : '<span class="text-sm text-slate-500">None</span>';
+          var sourceLink = entry.wikiUrl ? '<a class="font-semibold text-emerald-700 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Source</a>' : '';
 
           card.innerHTML =
-            '<div class="flex gap-4">' +
-              '<div class="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">' +
+            '<div class="planner-card-top">' +
+              '<div class="planner-product-image">' +
                 '<img src="' + escapeHtml(imageSrc) + '" alt="' + escapeHtml(entry.productName) + '" class="h-full w-full object-cover">' +
               '</div>' +
-              '<div class="min-w-0 flex-1">' +
-                '<div class="flex items-start justify-between gap-3">' +
+              '<div class="min-w-0">' +
+                '<div class="flex flex-col gap-2">' +
                   '<div class="min-w-0">' +
                     '<h3 class="truncate text-lg font-black text-slate-900">' + escapeHtml(entry.productName) + '</h3>' +
-                  '<div class="mt-1 flex flex-wrap gap-2">' + sourceLabel + '<span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Uses ' + escapeHtml(selectedName) + ' x ' + entry.selectedQtyUsed + '</span></div>' +
+                    '<div class="planner-building-line mt-1">' + renderCompactBuildingVisual(entry.source || (entry.item && entry.item.source) || '') + '</div>' +
+                    '<div class="planner-selected-line mt-2">' + renderSelectedIngredientChip(selectedName, entry.selectedQtyUsed) + '</div>' +
                   '</div>' +
-                  '<div class="text-right">' +
-                    '<div class="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-400">Sell price</div>' +
-                    '<div class="text-2xl font-black text-emerald-700">' + formatCoins(entry.maxPrice) + '</div>' +
+                  '<div class="planner-card-body">' +
+                    renderCompactMetaRow(entry) +
+                    '<div>' +
+                      '<div class="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Needs:</div>' +
+                      '<div class="planner-needs-row">' + needsChips + '</div>' +
+                    '</div>' +
                   '</div>' +
                 '</div>' +
-
-                '<div class="mt-3 space-y-1 text-sm text-slate-600">' +
-                  '<div><span class="font-semibold text-slate-500">Other ingredients:</span> ' + escapeHtml(ingredientText) + '</div>' +
-                  '<div><span class="font-semibold text-slate-500">Production:</span> ' + formatMinutes(entry.productionTimeMin) + mastered + '</div>' +
-                  xpLine +
-                '</div>' +
-
-                '<div class="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">' +
-                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Coins / min</div><div class="mt-1 text-lg font-black text-slate-900">' + formatNumber(entry.coinsPerMinute, 1) + '</div></div>' +
-                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Coins / item</div><div class="mt-1 text-lg font-black text-slate-900">' + formatNumber(entry.coinsPerSelectedItem, 1) + '</div></div>' +
-                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Other types</div><div class="mt-1 text-lg font-black text-slate-900">' + entry.otherIngredientCount + '</div></div>' +
-                  '<div class="rounded-2xl bg-slate-50 p-3"><div class="font-bold text-slate-500">Bottleneck</div><div class="mt-1 text-lg font-black text-slate-900">' + escapeHtml(entry.bottleneckFlags.join(', ')) + '</div></div>' +
-                '</div>' +
-
-                '<div class="mt-3 flex flex-wrap gap-2">' + flags + '</div>' +
-
-                '<div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">' +
-                  '<div>' + possibleCrafts + '</div>' +
-                  '<div class="flex flex-wrap gap-2">' +
-                    (sourceLink ? sourceLink : '') +
-                    (entry.source ? '<a class="font-semibold text-slate-500 hover:text-slate-800 hover:underline" href="' + escapeHtml(entry.wikiUrl) + '" target="_blank" rel="noopener">Source</a>' : '') +
+                '<div class="mt-2 flex items-center justify-end">' +
+                  '<div class="flex items-center gap-2 text-xs text-slate-500">' +
+                    (sourceLink ? sourceLink : '<span class="text-slate-400">Source unavailable</span>') +
                   '</div>' +
                 '</div>' +
               '</div>' +
@@ -803,11 +1018,7 @@
           fewestIngredients.textContent = fewest ? String(fewest.otherIngredientCount) + ' (' + fewest.productName + ')' : '-';
 
           if (fastest) {
-            var quantityHint = state.quantity > 0 && fastest.selectedQtyUsed > 0 ? Math.floor(state.quantity / fastest.selectedQtyUsed) : 0;
             resultsHeading.textContent += ' - fastest: ' + fastest.productName + ' (' + formatMinutes(fastest.productionTimeMin) + ')';
-            if (quantityHint) {
-              resultsHeading.textContent += ', up to ' + quantityHint + ' crafts from your stock';
-            }
           }
         } else {
           bestCoinsPerMinute.textContent = '-';
