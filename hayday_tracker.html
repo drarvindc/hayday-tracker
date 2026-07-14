@@ -190,16 +190,19 @@
       <!-- Sync controls -->
       <span id="lastSyncDisplay" class="text-xs text-gray-500"></span>
       <span id="syncStatus" class="sync-disconnected"><span class="sync-dot sync-dot-red"></span> Not synced</span>
-      <button onclick="pullFromGist()" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+      <button id="pullFromGistBtn" onclick="pullFromGist()" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
         <i class="fas fa-download"></i> Pull
       </button>
-      <button onclick="pushToGist()" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+      <button id="pushToGistBtn" onclick="pushToGist()" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
         <i class="fas fa-upload"></i> Push
+      </button>
+      <button id="backupJsonBtn" onclick="downloadBackupJson()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+        <i class="fas fa-download"></i> Backup JSON
       </button>
       <button onclick="openSyncModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
         <i class="fas fa-cog"></i> Sync Settings
       </button>
-      <button id="refreshBtn" onclick="refreshFromGist()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
+      <button id="refreshBtn" onclick="refreshLocalView()" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
         <i class="fas fa-sync-alt"></i> Refresh
       </button>
       <a href="hayday_product_planner.html" class="bg-amber-100 hover:bg-amber-200 text-amber-800 px-4 py-2 rounded-full text-sm flex items-center gap-2">
@@ -509,19 +512,98 @@
       ]}
     };
 
-    // ---------- Load from old localStorage (migration) ----------
-    function loadFromLocalStorage() {
-      const saved = localStorage.getItem('haydayGlobalPoolV5');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.accounts && parsed.accounts.length > 0) {
-            accounts = parsed.accounts;
-            return true;
-          }
-        } catch (e) { /* ignore parse errors */ }
+    // ---------- Local-first sync state ----------
+    const STORAGE_KEY = 'haydayGlobalPoolV5';
+    const DIRTY_KEY = 'hayday_dirty';
+    const LAST_LOCAL_SAVE_KEY = 'hayday_last_local_save_time';
+    const PULL_BLOCKED_UNTIL_KEY = 'hayday_push_blocked_until';
+    const SCHEMA_VERSION = 2;
+    let lastLocalSaveTime = localStorage.getItem(LAST_LOCAL_SAVE_KEY) || '';
+    let pushBlockedUntil = parseInt(localStorage.getItem(PULL_BLOCKED_UNTIL_KEY) || '0', 10) || 0;
+    let pushInFlight = false;
+
+    function isDirty() {
+      return localStorage.getItem(DIRTY_KEY) === '1';
+    }
+
+    function getStoredState() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return null;
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return { accounts: parsed };
+        }
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch (e) {
+        console.error('loadFromLocalStorage parse error:', e);
       }
-      return false;
+      return null;
+    }
+
+    function writeLocalState(markDirty) {
+      const iso = new Date().toISOString();
+      lastLocalSaveTime = iso;
+      localStorage.setItem(LAST_LOCAL_SAVE_KEY, iso);
+      if (markDirty) {
+        localStorage.setItem(DIRTY_KEY, '1');
+      } else {
+        localStorage.removeItem(DIRTY_KEY);
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        accounts,
+        lastSync: lastSyncTime || '',
+        lastLocalSave: lastLocalSaveTime
+      }, null, 2));
+      updateSyncStatus();
+    }
+
+    function loadFromLocalStorage() {
+      const saved = getStoredState();
+      if (!saved || !Array.isArray(saved.accounts) || saved.accounts.length === 0) {
+        return false;
+      }
+      accounts = saved.accounts;
+      if (saved.lastSync) {
+        lastSyncTime = saved.lastSync;
+      }
+      if (saved.lastLocalSave) {
+        lastLocalSaveTime = saved.lastLocalSave;
+        localStorage.setItem(LAST_LOCAL_SAVE_KEY, lastLocalSaveTime);
+      }
+      ensureAccountsValid();
+      return true;
+    }
+
+    function setPushBlockedUntil(epochMs) {
+      pushBlockedUntil = epochMs || 0;
+      if (pushBlockedUntil > Date.now()) {
+        localStorage.setItem(PULL_BLOCKED_UNTIL_KEY, String(pushBlockedUntil));
+      } else {
+        localStorage.removeItem(PULL_BLOCKED_UNTIL_KEY);
+      }
+      updateSyncStatus();
+    }
+
+    function formatResetTime(epochMs) {
+      if (!epochMs) return '';
+      try {
+        return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function updatePushButtonState() {
+      const pushBtn = document.getElementById('pushToGistBtn');
+      if (!pushBtn) return;
+      const locked = pushInFlight || (pushBlockedUntil && pushBlockedUntil > Date.now());
+      pushBtn.disabled = locked;
+      pushBtn.classList.toggle('opacity-60', locked);
+      pushBtn.classList.toggle('cursor-not-allowed', locked);
     }
 
     // ---------- Sync Status UI ----------
@@ -530,14 +612,89 @@
       if (!el) return;
       if (state === 'connected') {
         el.className = 'sync-connected';
-        el.innerHTML = '<span class="sync-dot sync-dot-green"></span> ' + (msg || 'Synced via Gist');
-      } else if (state === 'loading') {
+        el.innerHTML = '<span class="sync-dot sync-dot-green"></span> ' + (msg || 'Synced');
+      } else if (state === 'loading' || state === 'saving-local' || state === 'pushing') {
         el.className = 'sync-loading';
         el.innerHTML = '<span class="sync-dot sync-dot-yellow"></span> ' + (msg || 'Saving...');
       } else {
         el.className = 'sync-disconnected';
         el.innerHTML = '<span class="sync-dot sync-dot-red"></span> ' + (msg || 'Not synced');
       }
+      updatePushButtonState();
+    }
+
+    function updateSyncStatus() {
+      const now = Date.now();
+      if (pushInFlight) {
+        setSyncStatus('pushing', 'Pushing to Gist...');
+        return;
+      }
+      if (pushBlockedUntil && pushBlockedUntil > now) {
+        const timeLabel = formatResetTime(pushBlockedUntil);
+        setSyncStatus('rate-limited', timeLabel ? `GitHub rate limit reached. Try again after ${timeLabel}.` : 'GitHub rate limited; local data safe');
+        return;
+      }
+      if (isDirty()) {
+        setSyncStatus('loading', 'Local changes saved, not pushed');
+        return;
+      }
+      if (lastSyncTime) {
+        setSyncStatus('connected', 'Synced');
+        return;
+      }
+      setSyncStatus('disconnected', GIST_ID && GITHUB_TOKEN ? 'Gist configured — manual push available' : 'Not synced');
+    }
+
+    function persistLocalChanges() {
+      writeLocalState(true);
+      updateLastSyncDisplay();
+    }
+
+    function clearDirtyState() {
+      localStorage.removeItem(DIRTY_KEY);
+      writeLocalState(false);
+      updateLastSyncDisplay();
+    }
+
+    function getSyncPayload() {
+      return {
+        accounts,
+        lastSync: lastSyncTime || '',
+        lastLocalSave: lastLocalSaveTime || '',
+        schemaVersion: SCHEMA_VERSION
+      };
+    }
+
+    function extractRateLimitReset(response) {
+      if (!response) return 0;
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) {
+        const seconds = parseInt(retryAfter, 10);
+        if (!Number.isNaN(seconds) && seconds > 0) {
+          return Date.now() + (seconds * 1000);
+        }
+      }
+      const resetHeader = response.headers.get('x-ratelimit-reset');
+      if (resetHeader) {
+        const resetSeconds = parseInt(resetHeader, 10);
+        if (!Number.isNaN(resetSeconds) && resetSeconds > 0) {
+          return resetSeconds * 1000;
+        }
+      }
+      return 0;
+    }
+
+    function getRateLimitMessage(response) {
+      const remaining = response.headers.get('x-ratelimit-remaining');
+      const reset = extractRateLimitReset(response);
+      const resetLabel = reset ? formatResetTime(reset) : '';
+      if (remaining === '0' && resetLabel) {
+        return `GitHub rate limit reached. Local data is saved. Try pushing again after ${resetLabel}.`;
+      }
+      if (resetLabel) {
+        return `GitHub rate limit reached. Local data is saved. Try pushing again after ${resetLabel}.`;
+      }
+      return 'GitHub rate limit reached. Local data is saved.';
     }
 
     // ---------- GitHub Gist API ----------
@@ -563,25 +720,23 @@
         }
         const content = gist.files[GIST_FILENAME].content;
         const data = JSON.parse(content);
-        // Only overwrite if Gist has actual data (not empty accounts)
         if (data.accounts && data.accounts.length > 0) {
           accounts = data.accounts;
-          // Grab timestamp from Gist data or metadata
           if (data.lastSync) {
             lastSyncTime = data.lastSync;
           } else if (gist.updated_at) {
             lastSyncTime = gist.updated_at;
           }
-          localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+          if (data.lastLocalSave) {
+            lastLocalSaveTime = data.lastLocalSave;
+          }
           ensureAccountsValid();
-          setSyncStatus('connected', 'Synced via Gist');
-          return true;
-        } else {
-          // Gist exists but has no data - keep local accounts as-is
-          setSyncStatus('connected', 'Gist empty, using local');
+          writeLocalState(false);
+          setSyncStatus('connected', 'Synced');
           return true;
         }
-
+        setSyncStatus('connected', 'Gist empty, local data kept');
+        return true;
       } catch (err) {
         console.error('loadFromGist error:', err);
         setSyncStatus('disconnected', 'Load failed: ' + (err.message || 'unknown error'));
@@ -594,12 +749,22 @@
         setSyncStatus('disconnected', 'No Gist configured');
         return false;
       }
-      setSyncStatus('loading', 'Saving...');
+      if (pushInFlight) {
+        return false;
+      }
+      const now = Date.now();
+      if (pushBlockedUntil && pushBlockedUntil > now) {
+        updateSyncStatus();
+        return false;
+      }
+      pushInFlight = true;
+      updatePushButtonState();
+      setSyncStatus('pushing', 'Pushing to Gist...');
       try {
         const payload = {
           files: {
             [GIST_FILENAME]: {
-              content: JSON.stringify({ accounts, lastSync: new Date().toISOString() }, null, 2)
+              content: JSON.stringify(getSyncPayload(), null, 2)
             }
           }
         };
@@ -613,29 +778,43 @@
           },
           body: JSON.stringify(payload)
         });
+        if (response.status === 403 || response.status === 429) {
+          const reset = extractRateLimitReset(response);
+          if (reset) setPushBlockedUntil(reset);
+          const msg = getRateLimitMessage(response);
+          setSyncStatus('rate-limited', msg);
+          showToast(msg);
+          return false;
+        }
         if (!response.ok) {
           const errText = await response.text();
           throw new Error(`HTTP ${response.status}: ${errText}`);
         }
         lastSyncTime = new Date().toISOString();
         localStorage.setItem('hayday_last_sync_time', lastSyncTime);
-        setSyncStatus('connected', 'Synced via Gist');
+        clearDirtyState();
+        setPushBlockedUntil(0);
+        updateSyncStatus();
         return true;
-
       } catch (err) {
         console.error('saveToGist error:', err);
-        setSyncStatus('disconnected', 'Save failed: ' + (err.message || 'unknown error'));
+        setSyncStatus('disconnected', 'Push failed; local data safe');
         return false;
+      } finally {
+        pushInFlight = false;
+        updatePushButtonState();
       }
     }
 
     // ---------- Persistence wrapper ----------
     async function saveData() {
-      const saved = await saveToGist();
+      setSyncStatus('saving-local', 'Saving locally...');
+      persistLocalChanges();
       renderAccounts();
       renderSiloBarnTable();
       renderTownTable();
       renderTrainTable();
+      updateSyncStatus();
     }
 
     // ---------- Sync settings UI ----------
@@ -652,72 +831,43 @@
       const newId = document.getElementById('gistIdInput').value.trim();
       const newToken = document.getElementById('tokenInput').value.trim();
       if (!newId || !newToken) {
-        document.getElementById('syncModalStatus').innerHTML = '<span class="text-red-600">⚠️ Both Gist ID and Token are required.</span>';
+        document.getElementById('syncModalStatus').innerHTML = '<span class="text-red-600">âš ï¸ Both Gist ID and Token are required.</span>';
         return;
       }
-      // Save to globals and localStorage
       GIST_ID = newId;
       GITHUB_TOKEN = newToken;
       localStorage.setItem('hayday_gist_id', GIST_ID);
       localStorage.setItem('hayday_github_token', GITHUB_TOKEN);
 
       const status = document.getElementById('syncModalStatus');
-      status.innerHTML = '<span class="text-yellow-700">⏳ Testing connection...</span>';
-      
+      status.innerHTML = '<span class="text-yellow-700">â³ Testing connection...</span>';
+
       try {
-        // Test connection first
         const url = `https://api.github.com/gists/${GIST_ID}`;
         const response = await fetch(url, {
           headers: { 'Authorization': `token ${GITHUB_TOKEN}` },
           cache: 'no-cache'
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const gist = await response.json();
-        
-        if (gist.files && gist.files[GIST_FILENAME]) {
-          const content = gist.files[GIST_FILENAME].content;
-          const data = JSON.parse(content);
-          // Gist has data - load it (overwrites local)
-          if (data.accounts && data.accounts.length > 0) {
-            accounts = data.accounts;
-            ensureAccountsValid();
-            status.innerHTML = '<span class="text-green-700">✅ Connected. Loaded data from Gist.</span>';
-            setSyncStatus('connected', 'Synced via Gist');
-          } else {
-            // Gist exists but empty - upload local data to it
-            if (accounts.length > 0) {
-              await saveToGist();
-              status.innerHTML = '<span class="text-green-700">✅ Connected. Your local data has been uploaded to the Gist.</span>';
-            } else {
-              status.innerHTML = '<span class="text-green-700">✅ Connected. Gist is empty. Add data and it will sync automatically.</span>';
-            }
-            setSyncStatus('connected', 'Synced via Gist');
-          }
-        } else {
-          // Gist exists but missing the file - create it with local data
-          // This shouldn't happen if user followed setup, but handle gracefully
-          status.innerHTML = `<span class="text-yellow-700">⚠️ Gist found but missing ${GIST_FILENAME}. Creating it now...</span>`;
-          await saveToGist();
-          status.innerHTML = `<span class="text-green-700">✅ Created ${GIST_FILENAME} in Gist with your data.</span>`;
-          setSyncStatus('connected', 'Synced via Gist');
-        }
+        await response.json();
+        status.innerHTML = '<span class="text-green-700">âœ… Connected. Local data stays on this device until you push it.</span>';
+        updateSyncStatus();
       } catch (err) {
-        status.innerHTML = '<span class="text-red-600">❌ Connection failed: ' + (err.message || 'unknown error') + '</span>';
+        status.innerHTML = '<span class="text-red-600">âŒ Connection failed: ' + (err.message || 'unknown error') + '</span>';
         setSyncStatus('disconnected', 'Connection failed');
       }
-      
-      // Re-render with whatever accounts we have now
-      renderAccounts();
-      renderSiloBarnTable();
-      renderTownTable();
-      renderTrainTable();
+
+      refreshLocalView();
     }
+
     function clearSyncSettings() {
       if (!confirm('Clear Gist ID and Token? Data will no longer sync.')) return;
       GIST_ID = '';
       GITHUB_TOKEN = '';
       localStorage.removeItem('hayday_gist_id');
       localStorage.removeItem('hayday_github_token');
+      localStorage.removeItem(DIRTY_KEY);
+      localStorage.removeItem(PULL_BLOCKED_UNTIL_KEY);
       document.getElementById('gistIdInput').value = '';
       document.getElementById('tokenInput').value = '';
       document.getElementById('syncModalStatus').innerHTML = '<span class="text-gray-600">Cleared. Re-enter credentials to reconnect.</span>';
@@ -749,21 +899,42 @@
         status.innerHTML = '<span class="text-red-600">❌ Connection failed: ' + (err.message || 'unknown error') + '</span>';
       }
     }
-    async function refreshFromGist() {
-      if (!GIST_ID || !GITHUB_TOKEN) {
-        alert('Please configure Sync Settings first (Gist ID + Token).');
-        return;
+    function refreshLocalView() {
+      renderAccounts();
+      renderSiloBarnTable();
+      renderTownTable();
+      renderTrainTable();
+      updateSyncStatus();
+    }
+
+    function shouldWarnBeforePull() {
+      if (!isDirty()) return true;
+      return confirm('You have unsynced local changes. Pulling will overwrite them.');
+    }
+
+    function applyRemoteState(remoteAccounts, remoteLastSync) {
+      accounts = Array.isArray(remoteAccounts) ? remoteAccounts : [];
+      if (remoteLastSync) {
+        lastSyncTime = remoteLastSync;
+        localStorage.setItem('hayday_last_sync_time', lastSyncTime);
       }
-      if (!confirm('Reload data from Gist? Any unsaved local changes will be lost.')) return;
-      const ok = await loadFromGist();
-      if (ok) {
-        renderAccounts();
-        renderSiloBarnTable();
-        renderTownTable();
-        renderTrainTable();
-      } else {
-        alert('Failed to load from Gist. Check credentials.');
-      }
+      ensureAccountsValid();
+      writeLocalState(false);
+    }
+
+    function downloadBackupJson() {
+      const payload = JSON.stringify(getSyncPayload(), null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hayday_backup_${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Backup JSON downloaded');
     }
 
     // ---------- Format Sync Time ----------
@@ -797,12 +968,10 @@
         alert('Please configure Sync Settings first (Gist ID + Token).');
         return;
       }
+      if (!shouldWarnBeforePull()) return;
       const ok = await loadFromGist();
       if (ok) {
-        renderAccounts();
-        renderSiloBarnTable();
-        renderTownTable();
-        renderTrainTable();
+        refreshLocalView();
         updateLastSyncDisplay();
         showToast('Data reloaded from Gist');
       } else {
@@ -816,12 +985,19 @@
         alert('Please configure Sync Settings first (Gist ID + Token).');
         return;
       }
+      if (pushInFlight) return;
+      if (pushBlockedUntil && pushBlockedUntil > Date.now()) {
+        const resetLabel = formatResetTime(pushBlockedUntil);
+        alert(resetLabel ? `GitHub rate limit reached. Try again after ${resetLabel}.` : 'GitHub rate limit reached. Try again later.');
+        updateSyncStatus();
+        return;
+      }
       const ok = await saveToGist();
       if (ok) {
         updateLastSyncDisplay();
         showToast('Data pushed to Gist');
-      } else {
-        alert('Failed to push to Gist. Check credentials.');
+      } else if (!(pushBlockedUntil && pushBlockedUntil > Date.now())) {
+        alert('Failed to push to Gist. Local data is safe.');
       }
     }
 
@@ -1118,29 +1294,23 @@
 
     // Initialize
     async function init() {
-      // First, try to load from old localStorage (migration path)
       const hadLocalData = loadFromLocalStorage();
-      
-      if (GIST_ID && GITHUB_TOKEN) {
-        // Gist is configured - try loading from Gist
-        // This will only overwrite accounts if Gist has data (non-empty accounts array)
-        await loadFromGist();
-        // If loadFromGist failed or Gist was empty, we keep whatever loadFromLocalStorage loaded
+
+      if (!hadLocalData) {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        writeLocalState(false);
+        setSyncStatus('disconnected', 'Not synced');
       } else {
-        if (!hadLocalData) {
-          // No Gist config and no localStorage data - use defaults
-          accounts = JSON.parse(JSON.stringify(defaultAccounts));
-          setSyncStatus('disconnected', 'No Gist configured');
-        } else {
-          setSyncStatus('disconnected', 'Not synced');
-        }
+        updateSyncStatus();
       }
-      
+
       ensureAccountsValid();
       renderAccounts();
       renderSiloBarnTable();
       renderTownTable();
       renderTrainTable();
+      updateSyncStatus();
+      updatePushButtonState();
     }
     window.onload = init;
     window.updateFarmLevel = updateFarmLevel;
@@ -1153,7 +1323,8 @@
     window.saveSyncSettings = saveSyncSettings;
     window.clearSyncSettings = clearSyncSettings;
     window.testGistConnection = testGistConnection;
-    window.refreshFromGist = refreshFromGist;
+    window.refreshLocalView = refreshLocalView;
+    window.refreshFromGist = pullFromGist;
   </script>
 </body>
 </html>

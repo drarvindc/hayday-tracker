@@ -110,8 +110,9 @@
     <div class="flex items-center justify-between mb-4 text-xs">
       <span id="mobileLastSyncDisplay" class="text-gray-500"></span>
       <span class="flex gap-2">
-        <button onclick="pullFromGist()" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded-full">⬇ Pull</button>
-        <button onclick="pushToGist()" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded-full">⬆ Push</button>
+        <button id="pullFromGistBtn" onclick="pullFromGist()" class="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded-full">⬇ Pull</button>
+        <button id="pushToGistBtn" onclick="pushToGist()" class="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded-full">⬆ Push</button>
+        <button id="backupJsonBtn" onclick="downloadBackupJson()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-full">⬇ Backup</button>
       </span>
     </div>
 
@@ -283,19 +284,81 @@
       }
     ];
 
-    // ---------- Load from old localStorage (migration) ----------
-    function loadFromLocalStorage() {
+    // ---------- Local-first sync state ----------
+    const DIRTY_KEY = 'hayday_dirty';
+    const LAST_LOCAL_SAVE_KEY = 'hayday_last_local_save_time';
+    const PULL_BLOCKED_UNTIL_KEY = 'hayday_push_blocked_until';
+    const SCHEMA_VERSION = 2;
+    let lastLocalSaveTime = localStorage.getItem(LAST_LOCAL_SAVE_KEY) || '';
+    let pushBlockedUntil = parseInt(localStorage.getItem(PULL_BLOCKED_UNTIL_KEY) || '0', 10) || 0;
+    let pushInFlight = false;
+
+    function isDirty() {
+      return localStorage.getItem(DIRTY_KEY) === '1';
+    }
+
+    function getStoredState() {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.accounts && parsed.accounts.length > 0) {
-            accounts = parsed.accounts;
-            return true;
-          }
-        } catch (e) { /* ignore parse errors */ }
+      if (!saved) return null;
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return { accounts: parsed };
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch (e) {
+        console.error('loadFromLocalStorage parse error:', e);
       }
-      return false;
+      return null;
+    }
+
+    function writeLocalState(markDirty) {
+      const iso = new Date().toISOString();
+      lastLocalSaveTime = iso;
+      localStorage.setItem(LAST_LOCAL_SAVE_KEY, iso);
+      if (markDirty) localStorage.setItem(DIRTY_KEY, '1');
+      else localStorage.removeItem(DIRTY_KEY);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        accounts,
+        lastSync: lastSyncTime || '',
+        lastLocalSave: lastLocalSaveTime
+      }, null, 2));
+      updateSyncStatus();
+    }
+
+    function loadFromLocalStorage() {
+      const saved = getStoredState();
+      if (!saved || !Array.isArray(saved.accounts) || saved.accounts.length === 0) return false;
+      accounts = saved.accounts;
+      if (saved.lastSync) lastSyncTime = saved.lastSync;
+      if (saved.lastLocalSave) {
+        lastLocalSaveTime = saved.lastLocalSave;
+        localStorage.setItem(LAST_LOCAL_SAVE_KEY, lastLocalSaveTime);
+      }
+      ensureAccountsValid();
+      return true;
+    }
+
+    function setPushBlockedUntil(epochMs) {
+      pushBlockedUntil = epochMs || 0;
+      if (pushBlockedUntil > Date.now()) localStorage.setItem(PULL_BLOCKED_UNTIL_KEY, String(pushBlockedUntil));
+      else localStorage.removeItem(PULL_BLOCKED_UNTIL_KEY);
+      updateSyncStatus();
+    }
+
+    function formatResetTime(epochMs) {
+      if (!epochMs) return '';
+      try { return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+    }
+
+    function updatePushButtonState() {
+      const pushBtn = document.getElementById('pushToGistBtn');
+      const pullBtn = document.getElementById('pullFromGistBtn');
+      if (!pushBtn || !pullBtn) return;
+      const locked = pushInFlight || (pushBlockedUntil && pushBlockedUntil > Date.now());
+      pushBtn.disabled = locked;
+      pullBtn.disabled = pushInFlight;
+      pushBtn.classList.toggle('opacity-60', locked);
+      pullBtn.classList.toggle('opacity-60', pushInFlight);
     }
 
     // ---------- Sync Status UI ----------
@@ -305,13 +368,75 @@
       if (state === 'connected') {
         el.className = 'sync-connected';
         el.innerHTML = '<span class="sync-dot sync-dot-green"></span> ' + (msg || 'Synced');
-      } else if (state === 'loading') {
+      } else if (state === 'loading' || state === 'saving-local' || state === 'pushing') {
         el.className = 'sync-loading';
-        el.innerHTML = '<span class="sync-dot sync-dot-yellow"></span> ' + (msg || '...');
+        el.innerHTML = '<span class="sync-dot sync-dot-yellow"></span> ' + (msg || 'Saving...');
       } else {
         el.className = 'sync-disconnected';
         el.innerHTML = '<span class="sync-dot sync-dot-red"></span> ' + (msg || 'Offline');
       }
+      updatePushButtonState();
+    }
+
+    function updateSyncStatus() {
+      const now = Date.now();
+      if (pushInFlight) {
+        setSyncStatus('pushing', 'Pushing to Gist...');
+        return;
+      }
+      if (pushBlockedUntil && pushBlockedUntil > now) {
+        const timeLabel = formatResetTime(pushBlockedUntil);
+        setSyncStatus('rate-limited', timeLabel ? `GitHub rate limit reached. Try again after ${timeLabel}.` : 'GitHub rate limited; local data safe');
+        return;
+      }
+      if (isDirty()) {
+        setSyncStatus('loading', 'Local changes saved, not pushed');
+        return;
+      }
+      if (lastSyncTime) {
+        setSyncStatus('connected', 'Synced');
+        return;
+      }
+      setSyncStatus('disconnected', GIST_ID && GITHUB_TOKEN ? 'Gist configured â€” manual push available' : 'Offline');
+    }
+
+    function persistLocalChanges() {
+      writeLocalState(true);
+      updateLastSyncDisplay();
+    }
+
+    function clearDirtyState() {
+      localStorage.removeItem(DIRTY_KEY);
+      writeLocalState(false);
+      updateLastSyncDisplay();
+    }
+
+    function getSyncPayload() {
+      return { accounts, lastSync: lastSyncTime || '', lastLocalSave: lastLocalSaveTime || '', schemaVersion: SCHEMA_VERSION };
+    }
+
+    function extractRateLimitReset(response) {
+      if (!response) return 0;
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) {
+        const seconds = parseInt(retryAfter, 10);
+        if (!Number.isNaN(seconds) && seconds > 0) return Date.now() + (seconds * 1000);
+      }
+      const resetHeader = response.headers.get('x-ratelimit-reset');
+      if (resetHeader) {
+        const resetSeconds = parseInt(resetHeader, 10);
+        if (!Number.isNaN(resetSeconds) && resetSeconds > 0) return resetSeconds * 1000;
+      }
+      return 0;
+    }
+
+    function getRateLimitMessage(response) {
+      const remaining = response.headers.get('x-ratelimit-remaining');
+      const reset = extractRateLimitReset(response);
+      const resetLabel = reset ? formatResetTime(reset) : '';
+      if (remaining === '0' && resetLabel) return `GitHub rate limit reached. Local data is saved. Try pushing again after ${resetLabel}.`;
+      if (resetLabel) return `GitHub rate limit reached. Local data is saved. Try pushing again after ${resetLabel}.`;
+      return 'GitHub rate limit reached. Local data is saved.';
     }
 
     // ---------- GitHub Gist API ----------
@@ -332,30 +457,21 @@
           throw new Error(`HTTP ${response.status}: ${errText}`);
         }
         const gist = await response.json();
-        if (!gist.files || !gist.files[GIST_FILENAME]) {
-          throw new Error('File not found in gist');
-        }
+        if (!gist.files || !gist.files[GIST_FILENAME]) throw new Error('File not found in gist');
         const content = gist.files[GIST_FILENAME].content;
         const data = JSON.parse(content);
-        // Only overwrite if Gist has actual data (not empty accounts)
         if (data.accounts && data.accounts.length > 0) {
           accounts = data.accounts;
-          // Grab timestamp from Gist data or metadata
-          if (data.lastSync) {
-            lastSyncTime = data.lastSync;
-          } else if (gist.updated_at) {
-            lastSyncTime = gist.updated_at;
-          }
-          localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+          if (data.lastSync) lastSyncTime = data.lastSync;
+          else if (gist.updated_at) lastSyncTime = gist.updated_at;
+          if (data.lastLocalSave) lastLocalSaveTime = data.lastLocalSave;
           ensureAccountsValid();
+          writeLocalState(false);
           setSyncStatus('connected', 'Synced');
           return true;
-        } else {
-          // Gist exists but has no data - keep local accounts as-is
-          setSyncStatus('connected', 'Gist empty, using local');
-          return true;
         }
-
+        setSyncStatus('connected', 'Gist empty, local data kept');
+        return true;
       } catch (err) {
         console.error('loadFromGist error:', err);
         setSyncStatus('disconnected', 'Load failed');
@@ -368,13 +484,19 @@
         setSyncStatus('disconnected', 'No Gist');
         return false;
       }
-      setSyncStatus('loading', 'Saving...');
+      if (pushInFlight) return false;
+      const now = Date.now();
+      if (pushBlockedUntil && pushBlockedUntil > now) {
+        updateSyncStatus();
+        return false;
+      }
+      pushInFlight = true;
+      updatePushButtonState();
+      setSyncStatus('pushing', 'Pushing to Gist...');
       try {
         const payload = {
           files: {
-            [GIST_FILENAME]: {
-              content: JSON.stringify({ accounts, lastSync: new Date().toISOString() }, null, 2)
-            }
+            [GIST_FILENAME]: { content: JSON.stringify(getSyncPayload(), null, 2) }
           }
         };
         const url = `https://api.github.com/gists/${GIST_ID}`;
@@ -386,19 +508,31 @@
           },
           body: JSON.stringify(payload)
         });
+        if (response.status === 403 || response.status === 429) {
+          const reset = extractRateLimitReset(response);
+          if (reset) setPushBlockedUntil(reset);
+          const msg = getRateLimitMessage(response);
+          setSyncStatus('rate-limited', msg);
+          showToast(msg);
+          return false;
+        }
         if (!response.ok) {
           const errText = await response.text();
           throw new Error(`HTTP ${response.status}: ${errText}`);
         }
         lastSyncTime = new Date().toISOString();
         localStorage.setItem('hayday_last_sync_time', lastSyncTime);
-        setSyncStatus('connected', 'Synced');
+        clearDirtyState();
+        setPushBlockedUntil(0);
+        updateSyncStatus();
         return true;
-
       } catch (err) {
         console.error('saveToGist error:', err);
-        setSyncStatus('disconnected', 'Save failed');
+        setSyncStatus('disconnected', 'Push failed; local data safe');
         return false;
+      } finally {
+        pushInFlight = false;
+        updatePushButtonState();
       }
     }
 
@@ -416,17 +550,15 @@
       const newId = document.getElementById('gistIdInput').value.trim();
       const newToken = document.getElementById('tokenInput').value.trim();
       if (!newId || !newToken) {
-        document.getElementById('syncModalStatus').innerHTML = '<span style="color:#b91c1c;">⚠️ Both fields required.</span>';
+        document.getElementById('syncModalStatus').innerHTML = '<span class="text-red-600">âš ï¸ Both fields required.</span>';
         return;
       }
       GIST_ID = newId;
       GITHUB_TOKEN = newToken;
       localStorage.setItem('hayday_gist_id', GIST_ID);
       localStorage.setItem('hayday_github_token', GITHUB_TOKEN);
-
       const status = document.getElementById('syncModalStatus');
-      status.innerHTML = '<span style="color:#92400e;">⏳ Testing...</span>';
-
+      status.innerHTML = '<span class="text-yellow-700">â³ Testing...</span>';
       try {
         const url = `https://api.github.com/gists/${GIST_ID}`;
         const response = await fetch(url, {
@@ -434,37 +566,14 @@
           cache: 'no-cache'
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const gist = await response.json();
-
-        if (gist.files && gist.files[GIST_FILENAME]) {
-          const content = gist.files[GIST_FILENAME].content;
-          const data = JSON.parse(content);
-          if (data.accounts && data.accounts.length > 0) {
-            accounts = data.accounts;
-            ensureAccountsValid();
-            status.innerHTML = '<span style="color:#166534;">✅ Connected. Loaded data from Gist.</span>';
-            setSyncStatus('connected', 'Synced');
-          } else {
-            if (accounts.length > 0) {
-              await saveToGist();
-              status.innerHTML = '<span style="color:#166534;">✅ Connected. Your local data uploaded to Gist.</span>';
-            } else {
-              status.innerHTML = '<span style="color:#166534;">✅ Connected. Gist empty.</span>';
-            }
-            setSyncStatus('connected', 'Synced');
-          }
-        } else {
-          status.innerHTML = `<span style="color:#92400e;">⚠️ Gist missing ${GIST_FILENAME}. Creating...</span>`;
-          await saveToGist();
-          status.innerHTML = '<span style="color:#166534;">✅ Created file in Gist.</span>';
-          setSyncStatus('connected', 'Synced');
-        }
+        await response.json();
+        status.innerHTML = '<span class="text-green-700">âœ… Connected. Local data stays on this device until you push it.</span>';
+        updateSyncStatus();
       } catch (err) {
-        status.innerHTML = '<span style="color:#b91c1c;">❌ Failed: ' + (err.message || 'unknown') + '</span>';
+        status.innerHTML = '<span class="text-red-600">âŒ Connection failed: ' + (err.message || 'unknown error') + '</span>';
         setSyncStatus('disconnected', 'Connection failed');
       }
-
-      refreshAll();
+      refreshLocalView();
     }
     function clearSyncSettings() {
       if (!confirm('Clear Gist ID and Token? Data will no longer sync.')) return;
@@ -472,9 +581,11 @@
       GITHUB_TOKEN = '';
       localStorage.removeItem('hayday_gist_id');
       localStorage.removeItem('hayday_github_token');
+      localStorage.removeItem(DIRTY_KEY);
+      localStorage.removeItem(PULL_BLOCKED_UNTIL_KEY);
       document.getElementById('gistIdInput').value = '';
       document.getElementById('tokenInput').value = '';
-      document.getElementById('syncModalStatus').innerHTML = '<span style="color:#6b7280;">Cleared.</span>';
+      document.getElementById('syncModalStatus').innerHTML = '<span class="text-gray-600">Cleared. Re-enter credentials to reconnect.</span>';
       setSyncStatus('disconnected', 'Offline');
     }
     async function testGistConnection() {
@@ -482,10 +593,10 @@
       const tmpId = document.getElementById('gistIdInput').value.trim();
       const tmpToken = document.getElementById('tokenInput').value.trim();
       if (!tmpId || !tmpToken) {
-        status.innerHTML = '<span style="color:#b91c1c;">⚠️ Enter Gist ID and Token first.</span>';
+        status.innerHTML = '<span class="text-red-600">âš ï¸ Enter Gist ID and Token first.</span>';
         return;
       }
-      status.innerHTML = '<span style="color:#92400e;">⏳ Testing...</span>';
+      status.innerHTML = '<span class="text-yellow-700">â³ Testing...</span>';
       try {
         const url = `https://api.github.com/gists/${tmpId}`;
         const response = await fetch(url, {
@@ -493,30 +604,37 @@
           cache: 'no-cache'
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const gist = await response.json();
-        if (gist.files && gist.files[GIST_FILENAME]) {
-          status.innerHTML = '<span style="color:#166534;">✅ Connection OK! File found.</span>';
-        } else {
-          status.innerHTML = `<span style="color:#92400e;">⚠️ Gist found but missing ${GIST_FILENAME}.</span>`;
-        }
+        await response.json();
+        status.innerHTML = '<span class="text-green-700">âœ… Connection OK! Gist file found.</span>';
       } catch (err) {
-        status.innerHTML = '<span style="color:#b91c1c;">❌ Failed: ' + (err.message || 'unknown') + '</span>';
+        status.innerHTML = '<span class="text-red-600">âŒ Connection failed: ' + (err.message || 'unknown error') + '</span>';
       }
     }
-    async function refreshFromGist() {
-      if (!GIST_ID || !GITHUB_TOKEN) {
-        alert('Please configure Sync Settings first.');
-        return;
-      }
-      if (!confirm('Reload data from Gist? Unsaved changes will be lost.')) return;
-      const ok = await loadFromGist();
-      if (ok) {
-        refreshAll();
-      } else {
-        alert('Failed to load from Gist.');
-      }
+    function refreshLocalView() {
+      refreshAll();
+      updateSyncStatus();
     }
-
+    function refreshFromGist() {
+      refreshLocalView();
+    }
+    function shouldWarnBeforePull() {
+      if (!isDirty()) return true;
+      return confirm('You have unsynced local changes. Pulling will overwrite them.');
+    }
+    function downloadBackupJson() {
+      const payload = JSON.stringify(getSyncPayload(), null, 2);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `hayday_backup_${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast('Backup JSON downloaded');
+    }
     // ---------- Format Sync Time ----------
     function formatSyncTime(isoString) {
       if (!isoString) return 'never';
@@ -606,7 +724,10 @@
 
     // ---------- Persistence wrapper ----------
     async function saveData() {
-      await saveToGist();
+      setSyncStatus('saving-local', 'Saving locally...');
+      persistLocalChanges();
+      refreshAll();
+      updateSyncStatus();
     }
 
     // ---------- Existing rendering functions ----------
@@ -867,22 +988,16 @@
       // First, try to load from old localStorage (migration path)
       const hadLocalData = loadFromLocalStorage();
 
-      if (GIST_ID && GITHUB_TOKEN) {
-        // Gist is configured - try loading from Gist
-        // This will only overwrite accounts if Gist has data (non-empty accounts array)
-        await loadFromGist();
-      } else {
-        if (!hadLocalData) {
-          accounts = JSON.parse(JSON.stringify(defaultAccounts));
-          setSyncStatus('disconnected', 'Offline');
-        } else {
-          setSyncStatus('disconnected', 'Not synced');
-        }
+      if (!hadLocalData) {
+        accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        writeLocalState(false);
       }
+      setSyncStatus('disconnected', hadLocalData ? 'Not synced' : 'Offline');
 
       ensureAccountsValid();
       if (accounts.length) currentFarmId = accounts[0].id;
       refreshAll();
+      updatePushButtonState();
       bindLevelChanges();
     }
     init();

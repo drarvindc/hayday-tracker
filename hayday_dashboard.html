@@ -101,11 +101,19 @@
     let GIST_ID = localStorage.getItem('hayday_gist_id') || '';
     let GITHUB_TOKEN = localStorage.getItem('hayday_github_token') || '';
     let lastSyncTime = localStorage.getItem('hayday_last_sync_time') || '';
+    let lastLocalSaveTime = localStorage.getItem('hayday_last_local_save_time') || '';
+    let pushBlockedUntil = parseInt(localStorage.getItem('hayday_push_blocked_until') || '0', 10) || 0;
     const GIST_FILENAME = 'hayday_data.json';
+    const STORAGE_KEY = 'haydayGlobalPoolV5';
+    const DIRTY_KEY = 'hayday_dirty';
+    const LAST_LOCAL_SAVE_KEY = 'hayday_last_local_save_time';
+    const PULL_BLOCKED_UNTIL_KEY = 'hayday_push_blocked_until';
+    const SCHEMA_VERSION = 2;
 
     // ---------- Data ----------
     let accounts = [];
     let dataSource = 'localStorage';
+    let pushInFlight = false;
 
     const trackedItems = [
       { name: "Nails", category: "silo", icon: "fas fa-gripfire" },
@@ -135,6 +143,68 @@
     const exclusiveTownMaterials = ["Brick", "Hammer", "Hand Drill", "Paint Bucket", "Stone Block", "Tar Bucket"];
     const expansionMaterials = ["Land Deed", "Mallet", "Marker Stake"];
     const trainMaterials = ["Refined Coal", "Iron Bar", "Silver Bar", "Gold Bar", "Platinum Bar"];
+
+    function isDirty() {
+      return localStorage.getItem(DIRTY_KEY) === '1';
+    }
+
+    function formatResetTime(epochMs) {
+      if (!epochMs) return '';
+      try {
+        return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return '';
+      }
+    }
+
+    function extractRateLimitReset(response) {
+      if (!response) return 0;
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) {
+        const seconds = parseInt(retryAfter, 10);
+        if (!Number.isNaN(seconds) && seconds > 0) return Date.now() + (seconds * 1000);
+      }
+      const resetHeader = response.headers.get('x-ratelimit-reset');
+      if (resetHeader) {
+        const resetSeconds = parseInt(resetHeader, 10);
+        if (!Number.isNaN(resetSeconds) && resetSeconds > 0) return resetSeconds * 1000;
+      }
+      return 0;
+    }
+
+    function setPushBlockedUntil(epochMs) {
+      pushBlockedUntil = epochMs || 0;
+      if (pushBlockedUntil > 0) {
+        localStorage.setItem(PULL_BLOCKED_UNTIL_KEY, String(pushBlockedUntil));
+      } else {
+        localStorage.removeItem(PULL_BLOCKED_UNTIL_KEY);
+      }
+      updateSyncBadge();
+    }
+
+    function updatePushButtonState() {
+      const btn = document.getElementById('pushToGistBtn');
+      if (!btn) return;
+      const blocked = pushBlockedUntil && pushBlockedUntil > Date.now();
+      btn.disabled = blocked || pushInFlight;
+      btn.classList.toggle('opacity-50', btn.disabled);
+      btn.classList.toggle('cursor-not-allowed', btn.disabled);
+      if (blocked) {
+        const when = formatResetTime(pushBlockedUntil);
+        btn.title = when ? `GitHub rate limit reached. Try again after ${when}.` : 'GitHub rate limit reached.';
+      } else {
+        btn.title = '';
+      }
+    }
+
+    function getSyncPayload() {
+      return {
+        accounts,
+        lastSync: lastSyncTime || '',
+        lastLocalSave: lastLocalSaveTime || '',
+        schemaVersion: SCHEMA_VERSION
+      };
+    }
 
     // ---- Personal Train Requirements Lookup ----
     const trainRequirementsTable = {
@@ -196,6 +266,20 @@
     function updateSyncBadge() {
       const el = document.getElementById('syncBadge');
       if (!el) return;
+      const blocked = pushBlockedUntil && pushBlockedUntil > Date.now();
+      if (blocked) {
+        const when = formatResetTime(pushBlockedUntil);
+        el.innerHTML = `<span class="sync-dot bg-red-500 inline-block mr-1"></span> GitHub rate limited; local data safe${when ? ` until ${when}` : ''}`;
+        el.className = 'text-xs bg-red-100 text-red-700 px-3 py-1 rounded-full';
+        updatePushButtonState();
+        return;
+      }
+      if (isDirty()) {
+        el.innerHTML = '<span class="sync-dot bg-yellow-500 inline-block mr-1"></span> Local changes saved, not pushed';
+        el.className = 'text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full';
+        updatePushButtonState();
+        return;
+      }
       if (GIST_ID && GITHUB_TOKEN && lastSyncTime) {
         try {
           const d = new Date(lastSyncTime);
@@ -213,16 +297,20 @@
         el.innerHTML = '<span class="sync-dot bg-gray-400 inline-block mr-1"></span> Local storage only';
         el.className = 'text-xs bg-gray-200 text-gray-600 px-3 py-1 rounded-full';
       }
+      updatePushButtonState();
     }
 
     // ---------- Load from localStorage ----------
     function loadFromLocalStorage() {
-      const saved = localStorage.getItem('haydayGlobalPoolV5');
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.accounts && parsed.accounts.length > 0) {
             accounts = parsed.accounts;
+            if (parsed.lastSync) lastSyncTime = parsed.lastSync;
+            if (parsed.lastLocalSave) lastLocalSaveTime = parsed.lastLocalSave;
+            if (!lastLocalSaveTime) lastLocalSaveTime = localStorage.getItem(LAST_LOCAL_SAVE_KEY) || '';
             return true;
           }
         } catch (e) { /* ignore */ }
@@ -252,7 +340,16 @@
           } else if (gist.updated_at) {
             lastSyncTime = gist.updated_at;
           }
+          lastLocalSaveTime = data.lastLocalSave || lastLocalSaveTime || lastSyncTime;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            accounts,
+            lastSync: lastSyncTime,
+            lastLocalSave: lastLocalSaveTime,
+            schemaVersion: data.schemaVersion || SCHEMA_VERSION
+          }));
           localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+          localStorage.setItem(LAST_LOCAL_SAVE_KEY, lastLocalSaveTime);
+          localStorage.removeItem(DIRTY_KEY);
           dataSource = 'gist';
           return true;
         }
@@ -709,17 +806,17 @@
     // ---------- Load Data ----------
     async function loadData() {
       const hadLocal = loadFromLocalStorage();
-      let gistLoaded = false;
 
-      if (GIST_ID && GITHUB_TOKEN) {
-        gistLoaded = await loadFromGist();
-        dataSource = gistLoaded ? 'gist' : 'localStorage';
-      } else {
-        dataSource = 'localStorage';
-      }
+      dataSource = 'localStorage';
 
-      if (!hadLocal && !gistLoaded) {
+      if (!hadLocal) {
         accounts = JSON.parse(JSON.stringify(defaultAccounts));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          accounts,
+          lastSync: '',
+          lastLocalSave: '',
+          schemaVersion: SCHEMA_VERSION
+        }));
       }
 
       ensureAccountsValid();
@@ -754,11 +851,19 @@
     // ---------- Save to Gist ----------
     async function saveToGist() {
       if (!GIST_ID || !GITHUB_TOKEN) return false;
+      if (pushInFlight) return false;
+      const now = Date.now();
+      if (pushBlockedUntil && pushBlockedUntil > now) {
+        updateSyncBadge();
+        return false;
+      }
+      pushInFlight = true;
+      updatePushButtonState();
       try {
         const payload = {
           files: {
             [GIST_FILENAME]: {
-              content: JSON.stringify({ accounts, lastSync: new Date().toISOString() }, null, 2)
+              content: JSON.stringify(getSyncPayload(), null, 2)
             }
           }
         };
@@ -771,15 +876,30 @@
           },
           body: JSON.stringify(payload)
         });
+        if (response.status === 403 || response.status === 429) {
+          const reset = extractRateLimitReset(response);
+          if (reset) setPushBlockedUntil(reset);
+          const when = reset ? formatResetTime(reset) : '';
+          const msg = `GitHub rate limit reached. Local data is saved. Try pushing again after ${when || 'the reset time'}.`;
+          alert(msg);
+          return false;
+        }
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         lastSyncTime = new Date().toISOString();
         localStorage.setItem('hayday_last_sync_time', lastSyncTime);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(getSyncPayload()));
+        localStorage.setItem(LAST_LOCAL_SAVE_KEY, lastLocalSaveTime || lastSyncTime);
+        localStorage.removeItem(DIRTY_KEY);
+        setPushBlockedUntil(0);
         updateSyncBadge();
         updateLastSyncDisplay();
         return true;
       } catch (err) {
         console.error('saveToGist error:', err);
         return false;
+      } finally {
+        pushInFlight = false;
+        updatePushButtonState();
       }
     }
 
@@ -787,6 +907,9 @@
     async function pullFromGist() {
       if (!GIST_ID || !GITHUB_TOKEN) {
         alert('Please configure Gist ID and Token in the Desktop tracker Sync Settings first.');
+        return;
+      }
+      if (isDirty() && !confirm('You have unsynced local changes. Pulling will overwrite them.')) {
         return;
       }
       const ok = await loadFromGist();
