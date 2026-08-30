@@ -1,8 +1,26 @@
-# Hay Day Farm Tracker - Global Pool & Town Upgrades
+# Hay Day Farm Tracker
 
-A dual-interface web app to track upgrade materials for Silo, Barn, Expansion, Town Service Buildings, and the Personal Train in Hay Day.
+A multi-farm planning tool for Hay Day — track upgrade materials, balance surplus between farms, and rank products by speed, sell price, coins per minute, and ingredient bottlenecks.
+
+![Hay Day Farm Tracker product planner and farm upgrade tracker hero image](docs/images/hayday_tracker_product_planner_farm_upgrade_hero.png)
+
+This unofficial Hay Day farm tracker combines a multi-farm upgrade tracker with a Hay Day product planner. Use it to plan silo and barn upgrades, expansion materials, town building upgrades, recipes, and resource balancing from one place.
 
 It uses a global pool model: the needed amount for each farm is calculated as `totalCurrent(all farms) - farmLevel`. Surplus (`+X`) means you can move items to another farm; deficit (`-X`) means you still need more.
+
+## Screenshots
+
+### Product Planner
+
+![Hay Day product planner recipe ranking screenshot](docs/images/made-expansion-and-upgrade-item-tracker-and-product-planner-v0-y7x6ks3n2uhh1.png)
+
+Search an ingredient, enter the amount available, and rank matching recipes by speed, sell price, coins per minute, usage of the selected item, or ingredient complexity.
+
+### Multi-farm Upgrade Tracker
+
+![Hay Day multi-farm upgrade material tracker screenshot](docs/images/made-expansion-and-upgrade-item-tracker-and-product-planner-v0-gqsvuzz12uhh1.png)
+
+Compare multiple farms side by side and immediately see surplus or deficit materials for Silo, Barn, Expansion, Town Service Buildings, and the Personal Train.
 
 ## Features
 
@@ -73,6 +91,10 @@ Feel free to fork and improve. Pull requests for bug fixes or additional Hay Day
 ## License
 
 MIT - use it, share it, tweak it.
+
+## Disclaimer
+
+Hay Day is a game by Supercell. This is an unofficial community-made planning tool and is not affiliated with or endorsed by Supercell.
 
 ---
 
